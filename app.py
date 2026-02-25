@@ -151,28 +151,36 @@ tab1, tab2 = st.tabs(["📊 理性數據分析", "🔮 感性玄學偏方"])
 
 with tab1:
     st.markdown("### 🤖 AI 大數據運算")
-    if st.button("🚀 開始科學分析", type="primary", key="science_btn"):
+    
+    # 1. 預設動作：瞬間載入 Google 試算表的資料
+    with st.spinner(f"正在載入【{game_info['name']}】雲端資料庫..."):
+        full_db_df = engine.load_data_from_sheet(game_info)
         
-        with st.spinner(f"正在檢查【{game_info['name']}】資料庫並同步最新數據..."):
-            full_db_df, is_updated = engine.update_and_get_data(game_info)
-            
-            if full_db_df.empty:
-                st.error("❌ 找不到歷史資料，且網路抓取失敗，請確認網路連線。")
-                st.stop()
-                
-            if game_info["type"] == "combo":
-                picks = engine.generate_ai_picks(full_db_df, game_info)
-                pos_data = None
+    if full_db_df.empty:
+        st.warning("⚠️ 雲端資料庫目前是空的，請點擊下方按鈕進行首次抓取。")
+        
+    # 2. 手動更新區塊：將按鈕放在這裡
+    if st.button("🔄 手動更新最新期數", type="primary", key="sync_btn"):
+        with st.spinner("啟動爬蟲抓取最新開獎號碼中，請稍候..."):
+            full_db_df, is_updated = engine.sync_latest_data(game_info, full_db_df)
+            if is_updated:
+                st.success("✅ 成功抓取新資料，已同步至 Google 試算表！")
             else:
-                picks = None
-                pos_data = engine.get_positional_analysis(full_db_df, game_info)
-        
-        if is_updated:
-            st.success("✅ 成功抓取最新開獎數據並更新資料庫！")
+                st.info("👍 目前雲端資料庫已經是最新狀態！")
+                
+    st.markdown("---")
+    
+    # 3. 如果有資料，就直接開始算牌並顯示 (不用等按按鈕)
+    if not full_db_df.empty:
+        if game_info["type"] == "combo":
+            picks = engine.generate_ai_picks(full_db_df, game_info)
+            pos_data = None
         else:
-            st.info("👍 本地資料庫已是最新狀態，直接載入歷史數據進行分析！")
+            picks = None
+            pos_data = engine.get_positional_analysis(full_db_df, game_info)
             
-        st.markdown("---")
+        latest_row = full_db_df.iloc[-1]
+        # ...(後面保留你原本印出 latest_issue, latest_draw 與圖表的程式碼即可)...
         
         latest_row = full_db_df.iloc[-1]
         latest_issue = latest_row['期數']
@@ -360,6 +368,7 @@ with tab2:
 
 st.markdown("---")
 st.caption("⚠️ 偏方純屬娛樂，投資請量力而為。")
+
 
 
 
