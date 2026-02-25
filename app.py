@@ -214,6 +214,43 @@ with tab1:
                               delta=f"近期開出 {pos['hot_count']} 次", 
                               delta_color="normal")
                     st.caption(f"次熱門數字: **{pos['sec_num']}**")
+                    
+        # ==========================================
+        # ⭐️ 新增：AI 命中率回測對答案區塊
+        # ==========================================
+        if game_info["type"] == "combo":
+            st.markdown("---")
+            st.subheader("🏆 AI 歷史準確度回測 (以最新一期為例)")
+            
+            with st.spinner("正在進行時光倒流回測..."):
+                accuracy_data = engine.calculate_prediction_accuracy(full_db_df, game_info)
+                
+            if accuracy_data:
+                st.write(f"假設我們在第 **{accuracy_data['issue']}** 期開獎前使用本系統，AI 當時的預測與實際命中表現如下：")
+                
+                # 顯示答案卷
+                actual_str = engine._format(accuracy_data['actual'])
+                st.info(f"🎯 **該期實際開出號碼： {actual_str}**")
+                
+                # 用 2 個欄位顯示四大策略的批改結果
+                cols = st.columns(2)
+                col_idx = 0
+                for strat_name, data in accuracy_data['strategies'].items():
+                    with cols[col_idx % 2]:
+                        picks_str = engine._format(data['picks'])
+                        hits_str = engine._format(data['hits']) if data['hit_count'] > 0 else "無"
+                        
+                        # 依照命中數量給予不同顏色的提示框
+                        if data['hit_count'] >= 3:
+                            st.success(f"**{strat_name}**\n\n👉 預測：{picks_str}\n\n🎯 命中 ({data['hit_count']} 顆)：**{hits_str}**")
+                        elif data['hit_count'] > 0:
+                            st.warning(f"**{strat_name}**\n\n👉 預測：{picks_str}\n\n🎯 命中 ({data['hit_count']} 顆)：**{hits_str}**")
+                        else:
+                            st.error(f"**{strat_name}**\n\n👉 預測：{picks_str}\n\n🎯 命中 (0 顆)：無")
+                    col_idx += 1
+            else:
+                st.write("歷史數據不足，無法進行回測分析。")
+
         
         # ==========================================
         # 大數據冷熱頻率統計圖表區塊
