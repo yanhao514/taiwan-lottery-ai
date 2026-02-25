@@ -1,3 +1,7 @@
+import json
+import gspread
+from google.oauth2.service_account import Credentials
+import streamlit as st
 import os
 import time
 import shutil
@@ -90,38 +94,51 @@ class TaiwanLotteryMaster:
             except: pass
             return [] # 發生錯誤時回傳空陣列，保護既有資料庫不被汙染
 
-    # ⭐️ 核心升級：整合讀取、比對與更新的「大管家」
+    # ⭐️ 核心升級：Google 試算表雲端資料庫大管家
     def update_and_get_data(self, game_info):
         game_name = game_info["name"]
-        file_name = f"db_{game_name}.csv"
-        stop_issue = None
-        old_df = pd.DataFrame()
         
-        # 1. 先查水表：看看本地有沒有資料庫
-        if os.path.exists(file_name):
-            old_df = pd.read_csv(file_name, encoding='utf-8-sig', dtype={'期數': str})
-            if not old_df.empty:
-                stop_issue = str(old_df.iloc[-1]['期數'])
-                
-        # 2. 出門抓資料：帶著 stop_issue 去網頁抓，遇到就停 (首次抓取預設抓 50 筆)
+        # 1. 拿出放在 Streamlit Secrets 的金鑰來連線
+        creds_dict = json.loads(st.secrets["google_credentials"])
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        # 2. 開啟 Google 試算表與對應的分頁
+        # ⚠️ 請確保你雲端硬碟裡的檔名叫做 "台彩大數據資料庫"，且分頁名稱與 game_name 一致
+        sheet = client.open("台彩大數據資料庫").worksheet(game_name)
+        
+        # 3. 讀取雲端現有資料
+        records = sheet.get_all_records()
+        if records:
+            old_df = pd.DataFrame(records)
+            old_df['期數'] = old_df['期數'].astype(str) # 確保期數是字串
+            stop_issue = str(old_df.iloc[-1]['期數'])
+        else:
+            old_df = pd.DataFrame()
+            stop_issue = None
+            
+        # 4. 帶著 stop_issue 去網頁抓最新開獎資料
         new_data_list = self.fetch_real_data(game_info, stop_issue=stop_issue, limit=50)
         
-        # 3. 處理結果：如果有抓到新資料，就跟舊資料合併存檔
+        # 5. 處理結果並寫回 Google 試算表
         if new_data_list:
             columns = ['期數'] + [f'號碼{i+1}' for i in range(game_info["balls"])]
             new_df = pd.DataFrame(new_data_list, columns=columns)
-            new_df = new_df.iloc[::-1].reset_index(drop=True) # 反轉順序
+            new_df = new_df.iloc[::-1].reset_index(drop=True) # 反轉順序，舊的在上面
             
-            if not old_df.empty:
-                combined_df = pd.concat([old_df, new_df], ignore_index=True)
-                combined_df = combined_df.drop_duplicates(subset=['期數'], keep='last', ignore_index=True)
-            else:
+            if old_df.empty:
+                # 如果雲端是空的，連同標題欄位一起寫入第一列
+                sheet.update([columns] + new_df.values.tolist())
                 combined_df = new_df
+            else:
+                # 如果雲端已有資料，直接把新資料「附加」到最下方
+                sheet.append_rows(new_df.values.tolist())
+                combined_df = pd.concat([old_df, new_df], ignore_index=True)
                 
-            combined_df.to_csv(file_name, index=False, encoding='utf-8-sig')
-            return combined_df, True # True 代表有抓到新資料
+            return combined_df, True # True 代表有抓到新資料並寫入雲端
         else:
-            return old_df, False # False 代表資料庫已是最新，不用更新
+            return old_df, False # False 代表雲端已是最新
 
     def generate_ai_picks(self, df, game_info):
         if game_info["type"] != "combo" or df.empty: return None
@@ -209,3 +226,4 @@ if __name__ == "__main__":
     app = TaiwanLotteryMaster()
 
     app.run()
+
