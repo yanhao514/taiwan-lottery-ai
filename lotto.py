@@ -189,6 +189,44 @@ class TaiwanLotteryMaster:
             "mixed": self._format(mixed_nums),
             "dragged": self._format(dragged_nums)
         }
+        
+        # ⭐️ 全新功能：詳細拖牌命中率分析
+    def get_dragged_analysis(self, df, game_info):
+        if game_info["type"] != "combo" or df.empty or len(df) < 2: return None
+
+        # 取得最新一期的開獎號碼，作為「拖牌」的基準
+        latest_draw = df.iloc[-1].drop('期數').values
+        nums_df = df.drop(columns=['期數'])
+
+        # 建立字典來記錄：{基準號碼: [下一期開出的所有號碼]}
+        correlation_map = {int(num): [] for num in latest_draw}
+        history_counts = {int(num): 0 for num in latest_draw} # 記錄基準號碼在歷史上總共出現過幾次
+
+        for i in range(len(nums_df) - 1):
+            curr_draw = [int(n) for n in nums_df.iloc[i].values]
+            next_draw = [int(n) for n in nums_df.iloc[i+1].values]
+            
+            for num in latest_draw:
+                if int(num) in curr_draw:
+                    history_counts[int(num)] += 1
+                    correlation_map[int(num)].extend(next_draw)
+
+        # 整理出每個號碼的 Top 3 拖牌機率
+        analysis_result = {}
+        for num in latest_draw:
+            total_appear = history_counts[num]
+            if total_appear > 0 and correlation_map[num]:
+                counts = Counter(correlation_map[num])
+                top_3 = counts.most_common(3) # 取出最常被拖出來的前三個號碼
+                analysis_result[num] = {
+                    "history_count": total_appear,
+                    "top_dragged": top_3
+                }
+            else:
+                analysis_result[num] = {"history_count": 0, "top_dragged": []}
+
+        return analysis_result
+
 
     def get_positional_analysis(self, df, game_info):
         if game_info["type"] != "position" or df.empty: return None
