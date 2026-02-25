@@ -1,15 +1,14 @@
-import json
-import gspread
-from google.oauth2.service_account import Credentials
-import streamlit as st
 import os
 import time
-import shutil
 import random
 import re
+import json
+import shutil
 import pandas as pd
+import streamlit as st
+import gspread
 from collections import Counter
-
+from google.oauth2.service_account import Credentials
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -28,29 +27,26 @@ class TaiwanLotteryMaster:
     def _format(self, nums):
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
+    # 爬蟲核心 (已針對 Streamlit 雲端環境加入 shutil 修補)
     def fetch_real_data(self, game_info, stop_issue=None, limit=50):
         url = f"https://www.taiwanlottery.com/lotto/result/{game_info['path']}"
         chrome_options = Options()
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox") 
-        chrome_options.add_argument("--disable-dev-shm-usage") 
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--log-level=3") 
         
-        # 👇 針對 Streamlit 雲端環境新增：自動尋找 Chromium 的安裝路徑
         chrome_options.binary_location = shutil.which("chromium") 
         service = Service(shutil.which("chromedriver"))
 
         try:
-            # 👇 這裡也要修改：加入 service 參數
             driver = webdriver.Chrome(service=service, options=chrome_options)
             driver.get(url)
             time.sleep(3) 
             body_text = driver.find_element(By.TAG_NAME, 'body').text
             driver.quit()
-            
-            # ... (下面的歷史資料解析邏輯完全不用動) ...
             
             lines = body_text.split('\n')
             history_data = []
@@ -63,11 +59,8 @@ class TaiwanLotteryMaster:
                 issue_match = re.search(r'(11\d{4,7})', line)
                 if issue_match:
                     current_issue = issue_match.group(1)
-                    
-                    # 💡 智慧煞車系統：如果網頁上的期數等於我們資料庫最後一期，立刻停止抓取！
                     if stop_issue and current_issue == stop_issue:
                         break
-                        
                     current_draw = [] 
                 
                 clean_line = re.sub(r'\d{2,3}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日', '', line)
@@ -92,9 +85,9 @@ class TaiwanLotteryMaster:
         except Exception as e:
             try: driver.quit()
             except: pass
-            return [] # 發生錯誤時回傳空陣列，保護既有資料庫不被汙染
+            return []
 
-    # ⭐️ 核心升級 1：共用的 Google Sheets 連線工具
+    # Google Sheets 連線工具
     def get_google_sheet(self, game_name):
         creds_dict = json.loads(st.secrets["google_credentials"])
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -102,23 +95,25 @@ class TaiwanLotteryMaster:
         client = gspread.authorize(creds)
         return client.open("台彩大數據資料庫").worksheet(game_name)
 
-    # ⭐️ 核心升級 2：只負責「秒讀」雲端資料庫 (不啟動爬蟲)
+    # 瞬間讀取雲端資料庫
     def load_data_from_sheet(self, game_info):
-        sheet = self.get_google_sheet(game_info["name"])
-        records = sheet.get_all_records()
-        if records:
-            df = pd.DataFrame(records)
-            df['期數'] = df['期數'].astype(str) # 確保期數是字串
-            return df
-        else:
+        try:
+            sheet = self.get_google_sheet(game_info["name"])
+            records = sheet.get_all_records()
+            if records:
+                df = pd.DataFrame(records)
+                df['期數'] = df['期數'].astype(str)
+                return df
+            else:
+                return pd.DataFrame()
+        except Exception as e:
             return pd.DataFrame()
 
-    # ⭐️ 核心升級 3：手動觸發爬蟲，並寫入新資料
+    # 手動觸發爬蟲，並寫入新資料
     def sync_latest_data(self, game_info, old_df):
         sheet = self.get_google_sheet(game_info["name"])
         stop_issue = str(old_df.iloc[-1]['期數']) if not old_df.empty else None
         
-        # 啟動 Selenium 去官網抓資料
         new_data_list = self.fetch_real_data(game_info, stop_issue=stop_issue, limit=50)
         
         if new_data_list:
@@ -133,9 +128,9 @@ class TaiwanLotteryMaster:
                 sheet.append_rows(new_df.values.tolist())
                 combined_df = pd.concat([old_df, new_df], ignore_index=True)
                 
-            return combined_df, True # True 代表有新資料
+            return combined_df, True
         else:
-            return old_df, False # False 代表沒新資料
+            return old_df, False
 
     def generate_ai_picks(self, df, game_info):
         if game_info["type"] != "combo" or df.empty: return None
@@ -221,7 +216,4 @@ class TaiwanLotteryMaster:
 
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
-
     app.run()
-
-
