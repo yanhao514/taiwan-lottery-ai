@@ -238,6 +238,39 @@ with tab1:
                 "開出次數": [freq_counts.get(i, 0) for i in range(10)]
             }).set_index("數字")
             st.bar_chart(chart_df, color="#0068c9", height=400)
+        # ==========================================
+        # ⭐️ 新增：拖牌命中率分析區塊
+        # ==========================================
+        if game_info["type"] == "combo":
+            st.markdown("---")
+            st.subheader("🧩 最新期號碼「拖牌命中率」深度分析")
+            
+            dragged_stats = engine.get_dragged_analysis(full_db_df, game_info)
+            if dragged_stats:
+                st.write(f"以第 {latest_issue} 期開出的號碼為基準，歷史大數據顯示下一期最容易跟著開出的號碼：")
+                
+                # 使用擴充面板，讓畫面保持整潔
+                with st.expander("📊 點擊展開各號碼拖牌機率表", expanded=True):
+                    # 使用 3 個欄位來排版
+                    cols = st.columns(3)
+                    col_idx = 0
+                    
+                    for base_num, stats in dragged_stats.items():
+                        total_appear = stats['history_count']
+                        with cols[col_idx % 3]:
+                            st.markdown(f"#### 🎯 號碼 【{base_num:02d}】")
+                            st.caption(f"歷史共開出 {total_appear} 次")
+                            
+                            if stats['top_dragged'] and total_appear > 0:
+                                for dragged_num, count in stats['top_dragged']:
+                                    # 計算命中率：(拖出次數 / 基準號碼總開出次數) * 100
+                                    hit_rate = (count / total_appear) * 100
+                                    st.write(f"👉 拖出 **{dragged_num:02d}** ({count}次, {hit_rate:.1f}%)")
+                            else:
+                                st.write("尚無足夠歷史數據")
+                            st.divider() # 加條分隔線比較好看
+                        col_idx += 1
+
             
         st.markdown("---")
         st.subheader("📁 歷史開獎資料庫預覽")
