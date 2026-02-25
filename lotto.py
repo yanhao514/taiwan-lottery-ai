@@ -1,4 +1,4 @@
-import os
+ import os
 import time
 import random
 import re
@@ -226,6 +226,48 @@ class TaiwanLotteryMaster:
                 analysis_result[num] = {"history_count": 0, "top_dragged": []}
 
         return analysis_result
+        
+        # ⭐️ 全新功能：AI 預測命中率回測 (時光倒流對答案)
+    def calculate_prediction_accuracy(self, df, game_info):
+        # 確保至少有 22 期以上的資料才能做足夠的回測
+        if game_info["type"] != "combo" or len(df) < 22: 
+            return None
+            
+        # 1. 切割資料：拿掉最新一期，用前面的歷史資料來模擬「開獎前」的狀態
+        past_df = df.iloc[:-1].reset_index(drop=True)
+        
+        # 2. 拿出答案卷：實際開出的最新一期號碼
+        actual_latest_row = df.iloc[-1]
+        actual_issue = actual_latest_row['期數']
+        actual_draw = set([int(n) for n in actual_latest_row.drop('期數').values])
+        
+        # 3. 呼叫 AI 產生當時的模擬預測
+        mock_picks = self.generate_ai_picks(past_df, game_info)
+        if not mock_picks:
+            return None
+            
+        results = {"issue": actual_issue, "actual": actual_draw, "strategies": {}}
+        
+        # 4. 批改考卷：解析四大策略並比對命中數量
+        strategies = [
+            ("hot", "🔥 策略一【全熱門號】"),
+            ("cold", "❄️ 策略二【全冷門號】"),
+            ("mixed", "🌗 策略三【冷熱各半】"),
+            ("dragged", "🧩 策略四【拖牌精選】")
+        ]
+        
+        for key, name in strategies:
+            # 將字串 "01, 05, 12" 轉回數字集合來比對
+            pick_set = set([int(n) for n in mock_picks[key].split(', ')])
+            hits = pick_set.intersection(actual_draw)
+            results["strategies"][name] = {
+                "picks": pick_set,
+                "hits": hits,
+                "hit_count": len(hits)
+            }
+            
+        return results
+
 
 
     def get_positional_analysis(self, df, game_info):
