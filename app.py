@@ -5,6 +5,50 @@ import hashlib
 import time
 from datetime import datetime
 from lotto import TaiwanLotteryMaster  # 假設你的爬蟲主程式檔名是 lotto.py
+from PIL import Image
+import numpy as np
+
+def image_to_numbers(image_file, game_info):
+    """靈感顯影：將圖片像素轉換為號碼"""
+    # 開啟圖片並轉為數值陣列
+    img = Image.open(image_file)
+    img = img.resize((100, 100)) # 縮小運算加速
+    img_array = np.array(img)
+    
+    # 算出圖片的總色彩數值當作種子
+    seed_val = int(np.sum(img_array))
+    random.seed(seed_val)
+    
+    max_num = game_info['max_num']
+    count = game_info['balls']
+    
+    # 產生號碼
+    lucky_nums = random.sample(range(1, max_num + 1), count)
+    random.seed(time.time()) # 重置種子
+    return sorted(lucky_nums)
+
+def iching_divination(game_info):
+    """易經占卜：產生卦象與號碼"""
+    # 模擬三個銅板擲六次 (6爻)
+    lines = []
+    # 0 = 陰, 1 = 陽 (簡單模擬)
+    for _ in range(6):
+        lines.append(random.choice([0, 1]))
+        
+    # 根據 6 個爻的結果產生一個唯一的數值種子
+    # 例如：101010 (二進位)
+    hex_val = int("".join(map(str, lines)), 2)
+    
+    # 加上時間因素，避免同一個卦象永遠出一樣的號碼
+    final_seed = hex_val + int(time.time())
+    random.seed(final_seed)
+    
+    max_num = game_info['max_num']
+    count = game_info['balls']
+    lucky_nums = random.sample(range(1, max_num + 1), count)
+    random.seed(time.time())
+    
+    return lines, sorted(lucky_nums)
 
 # --- 偏方函式庫 (可以直接寫在 app.py 裡面) ---
 
@@ -222,7 +266,48 @@ with tab2:
             name_nums = name_numerology(user_input, game_info)
             st.info(f"🔠 來自「{user_input}」的靈動解析結果：")
             st.header(f"{', '.join(map(str, name_nums))}")
+    # ... (接在原本的姓名測字下方) ...
+
+    # 偏方 4: 靈感顯影 (最新潮！)
+    with st.expander("📸 靈感顯影 (上傳照片)"):
+        st.write("拍一張你覺得有「財氣」的照片（如寵物、天空、幸運物），AI 幫你解析其中的數字密碼。")
+        uploaded_file = st.file_uploader("選擇一張照片...", type=["jpg", "png", "jpeg"])
+        
+        if uploaded_file is not None:
+            # 顯示縮圖
+            st.image(uploaded_file, caption='你的靈感來源', width=200)
+            
+            if st.button("🧩 解析圖片密碼"):
+                with st.spinner("正在分析像素能量..."):
+                    img_nums = image_to_numbers(uploaded_file, game_info)
+                    time.sleep(1) # 增加分析感
+                st.success("🖼️ 這張照片隱藏的號碼是：")
+                st.header(f"{', '.join(map(str, img_nums))}")
+
+    # 偏方 5: 易經卜卦 (最經典！)
+    with st.expander("🔮 易經六十四卦靈籤"):
+        st.write("心中默念「祈求中獎號碼」，按下按鈕進行數位起卦。")
+        if st.button("🪙 誠心起卦"):
+            lines, iching_nums = iching_divination(game_info)
+            
+            # 畫出卦象 (由下而上)
+            st.info("📜 你的卦象：")
+            col_hex, col_res = st.columns([1, 2])
+            
+            with col_hex:
+                # 顯示卦象圖形
+                for line in reversed(lines):
+                    if line == 1:
+                        st.markdown("___🟥🟥🟥___ (陽)") # 陽爻
+                    else:
+                        st.markdown("___🟦&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🟦___ (陰)") # 陰爻
+            
+            with col_res:
+                st.success("🧘 卦象靈數：")
+                st.header(f"{', '.join(map(str, iching_nums))}")
+                st.caption("此號碼源自卦象變化與當下時空。")
 
 st.markdown("---")
 st.caption("⚠️ 偏方純屬娛樂，投資請量力而為。")
+
 
