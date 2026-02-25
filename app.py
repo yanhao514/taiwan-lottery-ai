@@ -306,8 +306,60 @@ with tab2:
                 st.success("🧘 卦象靈數：")
                 st.header(f"{', '.join(map(str, iching_nums))}")
                 st.caption("此號碼源自卦象變化與當下時空。")
+        # 偏方 6: 股市財運共振
+    with st.expander("📈 股市代碼共振"):
+        st.write("輸入你關注的股票代碼，將大盤財氣轉化為今天的幸運數字。")
+        stock_code = st.text_input("輸入股票代碼 (例: 2330, 0050)：", placeholder="例如：2330")
+        if st.button("💹 運算財運號碼") and stock_code:
+            # 將股票代碼與今天的日期結合作為種子
+            today_str = datetime.now().strftime("%Y%m%d")
+            seed_str = f"{stock_code}_{today_str}"
+            seed_val = int(hashlib.sha256(seed_str.encode('utf-8')).hexdigest(), 16) % (10**8)
+            random.seed(seed_val)
+            
+            stock_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+            random.seed(time.time()) # 重置
+            
+            st.success(f"💰 來自代碼【{stock_code}】的財氣共振號碼：")
+            st.header(f"{', '.join(map(str, sorted(stock_nums)))}")
+            st.caption("此組號碼每日更新一次，祝你股海、彩券雙雙發財！")
+
+    # 偏方 7: 日本神社求籤
+    with st.expander("⛩️ 日本神社御神籤"):
+        st.write("彷彿置身日本神社，誠心搖動籤筒，抽出今天的運勢與幸運號碼。")
+        if st.button("🎋 搖籤筒"):
+            with st.spinner("搖動籤筒中... 喀啦喀啦..."):
+                time.sleep(1.5)
+                # 隨機抽出運勢與號碼
+                fortunes = ["🌸 大吉", "✨ 中吉", "🍀 小吉", "🍁 末吉"]
+                my_fortune = random.choice(fortunes)
+                omikuji_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+                
+            col_fortune, col_num = st.columns([1, 2])
+            with col_fortune:
+                st.error(f"### {my_fortune}")
+            with col_num:
+                st.success("⛩️ 神明賜予的幸運號碼：")
+                st.header(f"{', '.join(map(str, sorted(omikuji_nums)))}")
+
+    # 偏方 8: 倉儲條碼 / 貨號解碼
+    with st.expander("📦 萬物條碼 / 貨號解碼器"):
+        st.write("手邊有剛買的商品、印表機墨水或辦公用品嗎？輸入包裝上的條碼或貨號，解開隱藏的數字密碼。")
+        barcode_input = st.text_input("輸入商品條碼或 SKU 貨號：", placeholder="例如：4710123456789 或 HP680")
+        if st.button("🔍 掃描解碼") and barcode_input:
+            with st.spinner("嗶！正在解析商品編碼..."):
+                time.sleep(0.5)
+                # 將條碼字串轉為數值種子
+                barcode_seed = sum([ord(c) for c in barcode_input]) + int(time.time())
+                random.seed(barcode_seed)
+                barcode_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+                random.seed(time.time())
+                
+            st.success(f"🏷️ 條碼【{barcode_input}】解析完成：")
+            st.header(f"{', '.join(map(str, sorted(barcode_nums)))}")
 
 st.markdown("---")
 st.caption("⚠️ 偏方純屬娛樂，投資請量力而為。")
+
 
 
