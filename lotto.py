@@ -1,5 +1,6 @@
 import os
 import time
+import shutil
 import random
 import re
 import pandas as pd
@@ -23,22 +24,29 @@ class TaiwanLotteryMaster:
     def _format(self, nums):
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
-    # ⭐️ 核心升級：加入 stop_issue 參數，遇到已有的期數就煞車
     def fetch_real_data(self, game_info, stop_issue=None, limit=50):
         url = f"https://www.taiwanlottery.com/lotto/result/{game_info['path']}"
         chrome_options = Options()
-        chrome_options.add_argument("--headless") 
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox") 
+        chrome_options.add_argument("--disable-dev-shm-usage") 
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--log-level=3") 
         
+        # 👇 針對 Streamlit 雲端環境新增：自動尋找 Chromium 的安裝路徑
+        chrome_options.binary_location = shutil.which("chromium") 
+        service = Service(shutil.which("chromedriver"))
+
         try:
-            service = Service("chromedriver.exe")
+            # 👇 這裡也要修改：加入 service 參數
             driver = webdriver.Chrome(service=service, options=chrome_options)
             driver.get(url)
             time.sleep(3) 
             body_text = driver.find_element(By.TAG_NAME, 'body').text
             driver.quit()
+            
+            # ... (下面的歷史資料解析邏輯完全不用動) ...
             
             lines = body_text.split('\n')
             history_data = []
@@ -199,4 +207,5 @@ class TaiwanLotteryMaster:
 
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
+
     app.run()
