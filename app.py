@@ -178,24 +178,48 @@ with tab1:
                         col_idx += 1
             
             st.markdown("---")
-            st.subheader("🏆 AI 歷史準確度回測 (以一般號為基準)")
+            st.subheader("🏆 AI 歷史準確度回測 (包含特別號與獎金結算)")
             with st.spinner("正在進行時光倒流回測..."):
                 accuracy_data = engine.calculate_prediction_accuracy(full_db_df, game_info)
+                
             if accuracy_data:
                 actual_str = engine._format(accuracy_data['actual'])
-                st.info(f"🎯 **第 {accuracy_data['issue']} 期一般號碼： {actual_str}**")
+                # ⭐️ 顯示實際開出的特別號
+                if accuracy_data.get('actual_special') is not None:
+                    st.info(f"🎯 **第 {accuracy_data['issue']} 期實際開出： {actual_str} ➕ 特: {accuracy_data['actual_special']:02d}**")
+                else:
+                    st.info(f"🎯 **第 {accuracy_data['issue']} 期實際開出： {actual_str}**")
+                    
                 cols = st.columns(2)
                 col_idx = 0
                 for strat_name, data in accuracy_data['strategies'].items():
                     with cols[col_idx % 2]:
                         picks_str = engine._format(data['picks'])
                         hits_str = engine._format(data['hits']) if data['hit_count'] > 0 else "無"
-                        if data['hit_count'] >= 3:
-                            st.success(f"**{strat_name}**\n\n一般號預測：{picks_str}\n\n🎯 命中({data['hit_count']}顆)：**{hits_str}**")
-                        elif data['hit_count'] > 0:
-                            st.warning(f"**{strat_name}**\n\n一般號預測：{picks_str}\n\n🎯 命中({data['hit_count']}顆)：**{hits_str}**")
+                        
+                        # ⭐️ 處理特別號的顯示與命中狀態
+                        sp_pick_str = f" ➕ 特: {data['pick_special']:02d}" if data.get('pick_special') is not None else ""
+                        sp_hit_str = " (🎯命中特別號)" if data.get('special_hit') else ""
+                        
+                        # ⭐️ 根據獎金狀態決定卡片的顏色 (綠色/黃色/紅色)
+                        prize_text = data.get('prize', '無')
+                        if prize_text not in ["槓龜", "無"]:
+                            prize_display = f"💰 **獲得獎金：{prize_text}**"
+                            box_style = st.success
+                        elif data['hit_count'] > 0 or data.get('special_hit'):
+                            prize_display = f"💔 獲得獎金：{prize_text}"
+                            box_style = st.warning
                         else:
-                            st.error(f"**{strat_name}**\n\n一般號預測：{picks_str}\n\n🎯 命中(0顆)：無")
+                            prize_display = f"💨 獲得獎金：{prize_text}"
+                            box_style = st.error
+                            
+                        # 印出最終結果卡片
+                        box_style(
+                            f"**{strat_name}**\n\n"
+                            f"📝 預測：{picks_str}{sp_pick_str}\n\n"
+                            f"🎯 命中：{hits_str}{sp_hit_str}\n\n"
+                            f"{prize_display}"
+                        )
                     col_idx += 1
             else:
                 st.write("歷史數據不足，無法進行回測分析。")
