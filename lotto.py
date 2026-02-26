@@ -1,10 +1,15 @@
-import os, time, random, re, json, shutil
+import os, time, random, json
 import pandas as pd
 import streamlit as st
 import gspread
 import requests
+import urllib3
 from collections import Counter
 from google.oauth2.service_account import Credentials
+from datetime import datetime
+
+# 停用 SSL 不安全連線警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class TaiwanLotteryMaster:
     def __init__(self):
@@ -20,13 +25,13 @@ class TaiwanLotteryMaster:
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
     def fetch_real_data(self, game_info, stop_issue=None, limit=50):
-        # 1. 遊戲路徑對應到新版 API 的端點名稱
+        # 對應台彩 API 的端點名稱
         api_paths = {
-            "lotto649": "Lotto649Result",            # 大樂透
-            "super_lotto638": "SuperLotto638Result", # 威力彩
-            "daily_cash": "DailyCashResult",         # 今彩539
-            "4_d": "4DResult",                       # 4星彩
-            "3_d": "3DResult"                        # 3星彩
+            "lotto649": "Lotto649Result",
+            "super_lotto638": "SuperLotto638Result",
+            "daily_cash": "DailyCashResult",
+            "4_d": "4DResult",
+            "3_d": "3DResult"
         }
         
         api_name = api_paths.get(game_info["path"])
@@ -41,42 +46,46 @@ class TaiwanLotteryMaster:
         
         history_data = []
         try:
-            # 直接打 API 拿乾淨的 JSON 資料
-            res = requests.get(url, params=params, timeout=10)
+            # 使用 requests 打 API，並加上 verify=False 繞過 SSL 憑證驗證
+            res = requests.get(url, params=params, timeout=10, verify=False)
             data = res.json()
             
-            # API 回傳的資料通常包在 content 裡面的陣列中
             records = []
             if "content" in data:
-                for key, val in data["content"].items():
+                # 動態尋找包含開獎紀錄的陣列 (不寫死 key 名稱)
+                for key, val in data.get("content", {}).items():
                     if isinstance(val, list):
                         records = val
                         break
                         
             for rec in records:
                 issue = str(rec.get("period", ""))
-                # 如果遇到上次抓過的期數，就停止
+                if not issue: continue
+                
+                # 若遇到已經存在 Google Sheet 的最新期數，則停止抓取
                 if stop_issue and issue == stop_issue: 
                     break
                 
-                # drawNumberSize 通常是「大小順序」的乾淨陣列
+                # 取得一般號碼 (API 裡的 drawNumberSize 是依大小排序好的號碼)
                 nums_str = rec.get("drawNumberSize", [])
                 nums = [int(n) for n in nums_str]
                 
-                # 處理特別號 / 威力彩的第二區
-                special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
-                
-                if game_info["special"] > 0 and special_num is not None:
-                    nums.append(int(special_num))
+                # 處理特別號/第二區
+                if game_info["special"] > 0:
+                    special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
+                    if special_num is not None:
+                        nums.append(int(special_num))
                     
-                # 防呆：確認抓到的球數跟設定值一樣
-                if len(nums) == game_info["balls"] + game_info["special"]:
+                # 檢查號碼數量是否符合預期，避免寫入不完整的髒資料
+                target_length = game_info["balls"] + game_info["special"]
+                if len(nums) == target_length:
                     history_data.append([issue] + nums)
                     
             return history_data
             
         except Exception as e:
-            st.error(f"抓取 {game_info['name']} 失敗: {e}")
+            # 若是在 Streamlit 畫面上，可以顯示錯誤訊息方便除錯
+            # st.error(f"抓取 {game_info['name']} 失敗: {e}")
             return []
 
     def get_google_sheet(self, game_name):
@@ -245,7 +254,6 @@ class TaiwanLotteryMaster:
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
             client = gspread.authorize(creds)
             sheet = client.open("台彩大數據資料庫").worksheet("預測紀錄")
-            from datetime import datetime
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             row_data = [now, game_name, f"接續 {base_issue} 期", picks['hot'], picks['cold'], picks['mixed'], picks['dragged']]
             sheet.append_row(row_data)
@@ -274,6 +282,3 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
-
-
-
