@@ -297,9 +297,47 @@ class TaiwanLotteryMaster:
 
     def run(self): pass
 
+    def get_prize_amount(self, game_name, normal_hits, special_hit):
+        # 大樂透獎金規則
+        if game_name == "大樂透":
+            if normal_hits == 6: return "頭獎 (保證1億起)"
+            elif normal_hits == 5 and special_hit: return "貳獎 (浮動)"
+            elif normal_hits == 5: return "參獎 (浮動)"
+            elif normal_hits == 4 and special_hit: return "肆獎 (浮動)"
+            elif normal_hits == 4: return "NT$ 2,000"
+            elif normal_hits == 3 and special_hit: return "NT$ 1,000"
+            elif normal_hits == 2 and special_hit: return "NT$ 400"
+            elif normal_hits == 3: return "NT$ 400"
+            else: return "槓龜"
+            
+        # 威力彩獎金規則
+        elif game_name == "威力彩":
+            if normal_hits == 6 and special_hit: return "頭獎 (保證2億起)"
+            elif normal_hits == 6: return "貳獎 (浮動)"
+            elif normal_hits == 5 and special_hit: return "NT$ 150,000"
+            elif normal_hits == 5: return "NT$ 20,000"
+            elif normal_hits == 4 and special_hit: return "NT$ 4,000"
+            elif normal_hits == 4: return "NT$ 800"
+            elif normal_hits == 3 and special_hit: return "NT$ 400"
+            elif normal_hits == 2 and special_hit: return "NT$ 200"
+            elif normal_hits == 3: return "NT$ 100"
+            elif normal_hits == 1 and special_hit: return "NT$ 100"
+            else: return "槓龜"
+            
+        # 今彩539獎金規則
+        elif game_name == "今彩539":
+            if normal_hits == 5: return "NT$ 8,000,000"
+            elif normal_hits == 4: return "NT$ 20,000"
+            elif normal_hits == 3: return "NT$ 300"
+            elif normal_hits == 2: return "NT$ 50"
+            else: return "槓龜"
+            
+        return "無"
+
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
