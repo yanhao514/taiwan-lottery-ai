@@ -24,7 +24,7 @@ class TaiwanLotteryMaster:
     def _format(self, nums):
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
-    def fetch_real_data(self, game_info, stop_issue=None, limit=50):
+    def fetch_real_data(self, game_info, stop_issue=None, limit=200):
         # 對應台彩 API 的端點名稱
         api_paths = {
             "lotto649": "Lotto649Result",
@@ -47,13 +47,13 @@ class TaiwanLotteryMaster:
         month = now.month
         
         try:
-            # 往前找 6 個月，通常絕對夠湊滿 50 期資料
+            # ⭐️ 往前找 36 個月 (3年)，絕對夠湊滿 200 期
             for _ in range(36):
                 month_str = f"{year}-{month:02d}"
                 params = {
-                    "month": month_str, # ⭐️ 核心修正：強制帶入月份參數 (例如 2024-02)
+                    "month": month_str,
                     "pageNum": 1,
-                    "pageSize": 200
+                    "pageSize": 100  # ⭐️ 單月上限拉高到 100，確保不會被截斷
                 }
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
@@ -90,7 +90,7 @@ class TaiwanLotteryMaster:
                         if not any(issue == existing[0] for existing in history_data):
                             history_data.append([issue] + nums)
                             
-                    # 如果已經抓滿設定的筆數，就收工回傳
+                    # ⭐️ 如果已經抓滿設定的筆數 (200期)，就收工回傳
                     if len(history_data) >= limit:
                         return history_data
                 
@@ -105,7 +105,7 @@ class TaiwanLotteryMaster:
         except Exception as e:
             # st.error(f"抓取 {game_info['name']} 失敗: {e}")
             return history_data
-
+            
     def get_google_sheet(self, game_name):
         creds_dict = json.loads(st.secrets["google_credentials"])
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -300,6 +300,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
