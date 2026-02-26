@@ -148,10 +148,12 @@ with tab1:
         if picks:
             st.subheader("🎯 AI 智能實戰選號推薦")
             
-            # ⭐️ 自動儲存機制：背景默默把推薦號碼存上雲端
+            # ⭐️ 自動儲存機制：背景默默把推薦號碼存上雲端，且防重複！
             save_status = engine.auto_save_prediction(game_info['name'], latest_issue, picks)
             if save_status == True:
-                st.toast(f"✅ 【{game_info['name']}】第 {latest_issue} 期的 AI 預測已自動備份至雲端！", icon="💾")
+                st.toast(f"✅ 【{game_info['name']}】第 {latest_issue} 期的預測已自動備份！", icon="💾")
+            elif save_status == "exists":
+                st.toast(f"📌 第 {latest_issue} 期預測早已存檔，自動略過重複寫入。", icon="🛡️")
             
             col1, col2 = st.columns(2)
             with col1:
