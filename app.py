@@ -143,6 +143,23 @@ with tab1:
                 st.caption("近20期極少開出")
                 st.success(f"🧩 **策略四【拖牌精選】**\n\n{picks['dragged']}")
                 st.caption("根據最新期歷史軌跡拖出")
+
+            # ... (上面是你原本印出 策略四【拖牌精選】 的程式碼) ...
+            
+            # ⭐️ 新增：一鍵儲存預測結果按鈕
+            st.write("") # 空一行比較好看
+            if st.button("💾 將本次預測號碼紀錄到雲端", type="secondary", use_container_width=True):
+                with st.spinner("正在寫入 Google 試算表..."):
+                    success = engine.save_prediction_record(game_info['name'], latest_issue, picks)
+                    if success:
+                        st.success("✅ 預測結果已成功儲存至「預測紀錄」分頁！")
+                        st.balloons()
+                    else:
+                        st.error("❌ 儲存失敗！請確認 Google 試算表中是否已建立「預測紀錄」分頁。")
+                        
+            # st.markdown("---")  <- 這是原本準備進入拖牌分析的分隔線
+            # st.subheader("🧩 最新期號碼「拖牌命中率」深度分析")
+            # ...
                 
             # ⭐️ 拖牌命中率分析
             st.markdown("---")
