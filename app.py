@@ -10,7 +10,7 @@ import numpy as np
 from lotto import TaiwanLotteryMaster
 
 # ==========================================
-# 🔮 偏方函式庫 (玄學演算法)
+# 🔮 偏方函式庫 (玄學演算法) - 升級特別號版
 # ==========================================
 def get_zodiac_luck(sign, game_info):
     today_str = datetime.now().strftime("%Y%m%d")
@@ -18,8 +18,9 @@ def get_zodiac_luck(sign, game_info):
     seed_val = int(hashlib.sha256(seed_str.encode('utf-8')).hexdigest(), 16) % (10**8)
     random.seed(seed_val)
     lucky_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+    s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
     random.seed(time.time())
-    return sorted(lucky_nums)
+    return sorted(lucky_nums), s_num
 
 def divinatory_blocks(game_info):
     max_num = game_info['max_num']
@@ -40,7 +41,8 @@ def divinatory_blocks(game_info):
             progress_text.text(f"👋 {num} 號沒杯/笑杯，重求...")
     bar.empty()
     progress_text.empty()
-    return sorted(candidates)
+    s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
+    return sorted(candidates), s_num
 
 def name_numerology(name, game_info):
     input_str = f"{name}_{int(time.time())}"
@@ -57,23 +59,33 @@ def name_numerology(name, game_info):
             hash_object = hashlib.sha256(hex_dig.encode())
             hex_dig = hash_object.hexdigest()
             idx = 0
-    return sorted(list(nums))
+    random.seed(int(hex_dig[:8], 16)) # 利用雜湊值來產生特別號
+    s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
+    random.seed(time.time())
+    return sorted(list(nums)), s_num
 
 def image_to_numbers(image_file, game_info):
     img = Image.open(image_file).resize((100, 100))
     img_array = np.array(img)
     random.seed(int(np.sum(img_array)))
     lucky_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+    s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
     random.seed(time.time())
-    return sorted(lucky_nums)
+    return sorted(lucky_nums), s_num
 
 def iching_divination(game_info):
     lines = [random.choice([0, 1]) for _ in range(6)]
     hex_val = int("".join(map(str, lines)), 2)
     random.seed(hex_val + int(time.time()))
     lucky_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+    s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
     random.seed(time.time())
-    return lines, sorted(lucky_nums)
+    return lines, sorted(lucky_nums), s_num
+
+# ⭐️ 排版小幫手：負責把偏方算出來的號碼組合出漂亮的字串
+def format_magic_nums(nums, s_num):
+    reg_str = ", ".join([f"{int(n):02d}" for n in nums])
+    return f"{reg_str} ➕ 特: {s_num:02d}" if s_num is not None else reg_str
 
 # ==========================================
 # 🖥️ 網頁主程式 (UI 介面)
@@ -257,21 +269,24 @@ with tab2:
     with st.expander("🔯 本日星座幸運靈數"):
         my_sign = st.selectbox("你的星座是？", ["♈ 牡羊", "♉ 金牛", "♊ 雙子", "♋ 巨蟹", "♌ 獅子", "♍ 處女", "♎ 天秤", "♏ 天蠍", "♐ 射手", "♑ 魔羯", "♒ 水瓶", "♓ 雙魚"])
         if st.button("✨ 召喚星象之力"):
+            nums, s_num = get_zodiac_luck(my_sign, game_info)
             st.success(f"🌌 {my_sign} 今天的宇宙共振號碼：")
-            st.header(f"{', '.join(map(str, get_zodiac_luck(my_sign, game_info)))}")
+            st.header(format_magic_nums(nums, s_num))
             
     with st.expander("🙏 數位擲筊求明牌"):
         if st.button("🥠 開始求籤 (需擲出聖筊)"):
             with st.spinner("🙏 弟子誠心求號，請神明指示..."):
+                nums, s_num = divinatory_blocks(game_info)
                 st.success(f"🎉 神明賜給你的號碼：")
-                st.header(f"{', '.join(map(str, divinatory_blocks(game_info)))}")
+                st.header(format_magic_nums(nums, s_num))
                 st.balloons()
             
     with st.expander("🔢 姓名/靈感測字"):
         user_input = st.text_input("輸入名字或靈感：", placeholder="例如：王小明...")
         if st.button("💫 解析靈動數") and user_input:
+            nums, s_num = name_numerology(user_input, game_info)
             st.info(f"🔠 來自「{user_input}」的解析結果：")
-            st.header(f"{', '.join(map(str, name_numerology(user_input, game_info)))}")
+            st.header(format_magic_nums(nums, s_num))
 
     with st.expander("📸 靈感顯影 (上傳照片)"):
         uploaded_file = st.file_uploader("選擇一張照片...", type=["jpg", "png", "jpeg"])
@@ -279,50 +294,53 @@ with tab2:
             st.image(uploaded_file, caption='你的靈感來源', width=200)
             if st.button("🧩 解析圖片密碼"):
                 with st.spinner("正在分析像素能量..."):
-                    img_nums = image_to_numbers(uploaded_file, game_info)
+                    nums, s_num = image_to_numbers(uploaded_file, game_info)
                     time.sleep(1)
                 st.success("🖼️ 這張照片隱藏的號碼是：")
-                st.header(f"{', '.join(map(str, img_nums))}")
+                st.header(format_magic_nums(nums, s_num))
 
     with st.expander("🔮 易經六十四卦靈籤"):
         if st.button("🪙 誠心起卦"):
-            lines, iching_nums = iching_divination(game_info)
+            lines, nums, s_num = iching_divination(game_info)
             col_hex, col_res = st.columns([1, 2])
             with col_hex:
                 for line in reversed(lines):
                     st.markdown("___🟥🟥🟥___ (陽)" if line == 1 else "___🟦&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🟦___ (陰)")
             with col_res:
                 st.success("🧘 卦象靈數：")
-                st.header(f"{', '.join(map(str, iching_nums))}")
+                st.header(format_magic_nums(nums, s_num))
 
     with st.expander("📈 股市代碼共振"):
         stock_code = st.text_input("輸入股票代碼：", placeholder="例如：2330")
         if st.button("💹 運算財運號碼") and stock_code:
             seed_val = int(hashlib.sha256(f"{stock_code}_{datetime.now().strftime('%Y%m%d')}".encode()).hexdigest(), 16) % (10**8)
             random.seed(seed_val)
-            stock_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+            nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+            s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
             random.seed(time.time())
             st.success(f"💰 來自代碼【{stock_code}】的財氣共振號碼：")
-            st.header(f"{', '.join(map(str, sorted(stock_nums)))}")
+            st.header(format_magic_nums(sorted(nums), s_num))
 
     with st.expander("⛩️ 日本神社御神籤"):
         if st.button("🎋 搖籤筒"):
             with st.spinner("搖動籤筒中..."):
                 time.sleep(1.5)
                 my_fortune = random.choice(["🌸 大吉", "✨ 中吉", "🍀 小吉", "🍁 末吉"])
-                omikuji_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+                nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+                s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
             col_fortune, col_num = st.columns([1, 2])
             with col_fortune: st.error(f"### {my_fortune}")
             with col_num:
                 st.success("⛩️ 幸運號碼：")
-                st.header(f"{', '.join(map(str, sorted(omikuji_nums)))}")
+                st.header(format_magic_nums(sorted(nums), s_num))
 
     with st.expander("📦 萬物條碼 / 貨號解碼器"):
         barcode_input = st.text_input("輸入商品條碼或 SKU 貨號：", placeholder="例如：4710123456789")
         if st.button("🔍 掃描解碼") and barcode_input:
             with st.spinner("嗶！正在解析..."):
                 random.seed(sum([ord(c) for c in barcode_input]) + int(time.time()))
-                barcode_nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+                nums = random.sample(range(1, game_info['max_num'] + 1), game_info['balls'])
+                s_num = random.randint(1, game_info['s_max']) if game_info['special'] > 0 else None
                 random.seed(time.time())
             st.success(f"🏷️ 條碼【{barcode_input}】解析完成：")
-            st.header(f"{', '.join(map(str, sorted(barcode_nums)))}")
+            st.header(format_magic_nums(sorted(nums), s_num))
