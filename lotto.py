@@ -103,14 +103,115 @@ class TaiwanLotteryMaster:
             
         except Exception as e:
             return history_data
-            
-    def get_google_sheet(self, game_name):
+
+    def get_google_sheet(self, sheet_name):
         creds_dict = json.loads(st.secrets["google_credentials"])
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
-        return client.open("台彩大數據資料庫").worksheet(game_name)
+        db = client.open("台彩大數據資料庫")
+        
+        # ⭐️ 新增防呆機制：如果找不到指定分頁(如「預測紀錄」)，自動幫你建立一個
+        worksheets = [ws.title for ws in db.worksheets()]
+        if sheet_name not in worksheets:
+            db.add_worksheet(title=sheet_name, rows="1000", cols="20")
+            
+        return db.worksheet(sheet_name)
 
+    def auto_save_prediction(self, game_name, base_issue, picks):
+        """自動在背景將推薦號碼存入雲端，並避免重複儲存"""
+        try:
+            sheet = self.get_google_sheet("預測紀錄")
+            try:
+                records = sheet.get_all_records()
+            except:
+                # 如果是全新的空表，先寫入標題欄位
+                headers = ["時間", "遊戲", "基準期數", "熱門", "冷門", "綜合", "拖牌"]
+                sheet.append_row(headers)
+                records = []
+                
+            # 檢查是否已經存過這一期的預測
+            for row in records:
+                if str(row.get('遊戲', '')) == game_name and str(row.get('基準期數', '')) == str(base_issue):
+                    return "exists" # 已經存過了，略過
+                    
+            # 沒存過，寫入新紀錄
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            row_data = [now, game_name, str(base_issue), picks['hot'], picks['cold'], picks['mixed'], picks['dragged']]
+            sheet.append_row(row_data)
+            return True
+        except Exception as e:
+            return False
+
+    def calculate_accuracy_from_cloud(self, df, game_info):
+        """直接從雲端讀取歷史預測紀錄，並與真實開獎結果進行對獎"""
+        if df.empty or len(df) < 2: return None
+        try:
+            sheet = self.get_google_sheet("預測紀錄")
+            records = sheet.get_all_records()
+            if not records: return None
+            
+            pred_df = pd.DataFrame(records)
+            if '遊戲' not in pred_df.columns: return None
+            pred_df = pred_df[pred_df['遊戲'] == game_info['name']]
+            if pred_df.empty: return None
+            
+            df['期數'] = df['期數'].astype(str)
+            actual_issues = df['期數'].tolist()
+            
+            # 從最新的預測紀錄開始往回找，找到第一筆「已經開獎」的紀錄來驗證
+            for idx in range(len(pred_df)-1, -1, -1):
+                row = pred_df.iloc[idx]
+                base_issue = str(row.get('基準期數', ''))
+                
+                # 如果這筆預測的「基準期」存在於歷史資料中
+                if base_issue in actual_issues:
+                    base_idx = actual_issues.index(base_issue)
+                    # 檢查這筆預測的「下一期 (目標期)」是不是已經開獎了
+                    if base_idx + 1 < len(actual_issues): 
+                        actual_draw_row = df.iloc[base_idx + 1]
+                        target_issue = actual_draw_row['期數']
+                        
+                        # 擷取真實開獎號碼
+                        reg_cols = [f'號碼{i+1}' for i in range(game_info["balls"])]
+                        actual_draw = set([int(n) for n in actual_draw_row[reg_cols].values])
+                        actual_special = int(actual_draw_row["特別號"]) if game_info["special"] > 0 and "特別號" in actual_draw_row else None
+                        
+                        results = {"issue": target_issue, "base_issue": base_issue, "actual": actual_draw, "actual_special": actual_special, "strategies": {}}
+                        strategies = [("hot", "熱門", "🔥 策略一【全熱門號】"), 
+                                      ("cold", "冷門", "❄️ 策略二【全冷門號】"), 
+                                      ("mixed", "綜合", "🌗 策略三【冷熱各半】"), 
+                                      ("dragged", "拖牌", "🧩 策略四【拖牌精選】")]
+                        
+                        # 進行對獎比對
+                        for key, col_name, strat_name in strategies:
+                            raw_pick_str = str(row.get(col_name, ""))
+                            parts = raw_pick_str.split(' ➕ 特:')
+                            pick_str = parts[0]
+                            pick_special = int(parts[1]) if len(parts) > 1 else None
+                            
+                            pick_set = set([int(n) for n in pick_str.split(', ') if n.isdigit()])
+                            hits = pick_set.intersection(actual_draw)
+                            special_hit = False
+                            if game_info["special"] > 0 and pick_special is not None and actual_special is not None:
+                                special_hit = (pick_special == actual_special)
+                                
+                            prize = self.get_prize_amount(game_info["name"], len(hits), special_hit)
+                            
+                            results["strategies"][strat_name] = {
+                                "picks": pick_set, 
+                                "pick_special": pick_special,
+                                "hits": hits, 
+                                "hit_count": len(hits),
+                                "special_hit": special_hit,
+                                "prize": prize,
+                                "raw_pick_str": raw_pick_str
+                            }
+                        return results # 找到最近一期可驗證的紀錄就回傳
+            return None
+        except Exception as e:
+            return None
+            
     def load_data_from_sheet(self, game_info):
         try:
             sheet = self.get_google_sheet(game_info["name"])
@@ -246,72 +347,6 @@ class TaiwanLotteryMaster:
                 analysis_result[num] = {"history_count": 0, "top_dragged": []}
         return analysis_result
 
-    def calculate_prediction_accuracy(self, df, game_info):
-        # 只針對組合型遊戲回測
-        if game_info["type"] != "combo" or len(df) < 22: return None
-        
-        past_df = df.iloc[:-1].reset_index(drop=True)
-        actual_latest_row = df.iloc[-1]
-        actual_issue = actual_latest_row['期數']
-        reg_cols = [f'號碼{i+1}' for i in range(game_info["balls"])]
-        actual_draw = set([int(n) for n in actual_latest_row[reg_cols].values])
-        
-        # ⭐️ 抓取實際開獎的特別號 (如果該遊戲有特別號的話)
-        actual_special = None
-        if game_info["special"] > 0 and "特別號" in actual_latest_row:
-            actual_special = int(actual_latest_row["特別號"])
-
-        mock_picks = self.generate_ai_picks(past_df, game_info)
-        if not mock_picks: return None
-        
-        # 將回傳結果擴充特別號與獎金欄位
-        results = {"issue": actual_issue, "actual": actual_draw, "actual_special": actual_special, "strategies": {}}
-        strategies = [("hot", "🔥 策略一【全熱門號】"), ("cold", "❄️ 策略二【全冷門號】"), ("mixed", "🌗 策略三【冷熱各半】"), ("dragged", "🧩 策略四【拖牌精選】")]
-        
-        for key, name in strategies:
-            raw_pick_str = mock_picks[key]
-            
-            # ⭐️ 解析一般號碼與特別號 (利用我們自己定義的 ' ➕ 特:' 來切分)
-            parts = raw_pick_str.split(' ➕ 特:')
-            pick_str = parts[0]
-            pick_special = int(parts[1]) if len(parts) > 1 else None
-            
-            pick_set = set([int(n) for n in pick_str.split(', ')])
-            hits = pick_set.intersection(actual_draw)
-            
-            # ⭐️ 判斷特別號是否命中
-            special_hit = False
-            if game_info["special"] > 0 and pick_special is not None and actual_special is not None:
-                special_hit = (pick_special == actual_special)
-                
-            # ⭐️ 計算獲得的獎金
-            prize = self.get_prize_amount(game_info["name"], len(hits), special_hit)
-            
-            results["strategies"][name] = {
-                "picks": pick_set, 
-                "pick_special": pick_special,
-                "hits": hits, 
-                "hit_count": len(hits),
-                "special_hit": special_hit,
-                "prize": prize
-            }
-            
-        return results
-
-    def save_prediction_record(self, game_name, base_issue, picks):
-        try:
-            creds_dict = json.loads(st.secrets["google_credentials"])
-            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-            client = gspread.authorize(creds)
-            sheet = client.open("台彩大數據資料庫").worksheet("預測紀錄")
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [now, game_name, f"接續 {base_issue} 期", picks['hot'], picks['cold'], picks['mixed'], picks['dragged']]
-            sheet.append_row(row_data)
-            return True
-        except Exception:
-            return False
-
     def get_positional_analysis(self, df, game_info):
         if game_info["type"] != "position" or df.empty: return None
         nums_df = df.tail(20).drop(columns=['期數'])
@@ -370,6 +405,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
