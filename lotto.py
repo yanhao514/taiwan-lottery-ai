@@ -48,7 +48,7 @@ class TaiwanLotteryMaster:
         
         try:
             # 往前找 6 個月，通常絕對夠湊滿 50 期資料
-            for _ in range(6):
+            for _ in range(36):
                 month_str = f"{year}-{month:02d}"
                 params = {
                     "month": month_str, # ⭐️ 核心修正：強制帶入月份參數 (例如 2024-02)
@@ -300,4 +300,5 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
