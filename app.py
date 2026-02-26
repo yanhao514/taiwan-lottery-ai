@@ -221,6 +221,11 @@ with tab1:
             freq_counts = Counter(full_db_df.drop(columns=['期數']).values.flatten())
             chart_df = pd.DataFrame({"數字": [str(i) for i in range(10)], "開出次數": [freq_counts.get(i, 0) for i in range(10)]}).set_index("數字")
             st.bar_chart(chart_df, color="#0068c9", height=400)
+            
+        # 👇 請把下面這三行加到 with tab1: 的最底部
+        st.markdown("---")
+        st.subheader("📁 歷史開獎資料庫預覽")
+        st.dataframe(full_db_df.tail(20).iloc[::-1], width='stretch')
 
 with tab2:
     st.markdown("### ⚡️ 寧可信其有，偏方大集合")
