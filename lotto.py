@@ -268,6 +268,39 @@ class TaiwanLotteryMaster:
             
         return results
 
+    # ⭐️ 新增：將 AI 預測結果存入 Google 試算表
+    def save_prediction_record(self, game_name, base_issue, picks):
+        try:
+            # 建立連線
+            creds_dict = json.loads(st.secrets["google_credentials"])
+            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            client = gspread.authorize(creds)
+            
+            # 打開我們剛剛新增的「預測紀錄」分頁
+            sheet = client.open("台彩大數據資料庫").worksheet("預測紀錄")
+            
+            # 取得當下時間
+            from datetime import datetime
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # 準備要寫入的資料（包含四大策略）
+            row_data = [
+                now, 
+                game_name, 
+                f"接續 {base_issue} 期", 
+                picks['hot'], 
+                picks['cold'], 
+                picks['mixed'], 
+                picks['dragged']
+            ]
+            
+            # 寫入試算表的最下方
+            sheet.append_row(row_data)
+            return True
+        except Exception as e:
+            return False
+
 
 
     def get_positional_analysis(self, df, game_info):
@@ -297,3 +330,4 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
