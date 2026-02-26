@@ -2,6 +2,7 @@ import os, time, random, re, json, shutil
 import pandas as pd
 import streamlit as st
 import gspread
+import requests
 from collections import Counter
 from google.oauth2.service_account import Credentials
 from selenium import webdriver
@@ -23,67 +24,63 @@ class TaiwanLotteryMaster:
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
     def fetch_real_data(self, game_info, stop_issue=None, limit=50):
-        url = f"https://www.taiwanlottery.com/lotto/result/{game_info['path']}"
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--log-level=3") 
-        chrome_options.binary_location = shutil.which("chromium") 
-        service = Service(shutil.which("chromedriver"))
+        # 1. 遊戲路徑對應到新版 API 的端點名稱
+        api_paths = {
+            "lotto649": "Lotto649Result",            # 大樂透
+            "super_lotto638": "SuperLotto638Result", # 威力彩
+            "daily_cash": "DailyCashResult",         # 今彩539
+            "4_d": "4DResult",                       # 4星彩
+            "3_d": "3DResult"                        # 3星彩
+        }
+        
+        api_name = api_paths.get(game_info["path"])
+        if not api_name: 
+            return []
+
+        url = f"https://api.taiwanlottery.com/TLCAPIWeB/Lottery/{api_name}"
+        params = {
+            "pageNum": 1,
+            "pageSize": limit
+        }
+        
+        history_data = []
         try:
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            driver.get(url)
-            time.sleep(3) 
-            body_text = driver.find_element(By.TAG_NAME, 'body').text
-            driver.quit()
+            # 直接打 API 拿乾淨的 JSON 資料
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
             
-            lines = body_text.split('\n')
-            history_data = []
-            current_issue = None
-            current_draw = []
-            
-            # ⭐️ 核心修正：台彩網頁會同時顯示「落球順序」與「大小順序」，所以總數字量是兩倍
-            if game_info["type"] == "combo":
-                target_balls = game_info["balls"] * 2 + game_info["special"]
-            else:
-                target_balls = game_info["balls"]
-            
-            for line in lines:
-                line = line.strip()
-                if not line: continue
-                issue_match = re.search(r'(11\d{4,7})', line)
-                if issue_match:
-                    current_issue = issue_match.group(1)
-                    if stop_issue and current_issue == stop_issue: break
-                    current_draw = [] 
+            # API 回傳的資料通常包在 content 裡面的陣列中
+            records = []
+            if "content" in data:
+                for key, val in data["content"].items():
+                    if isinstance(val, list):
+                        records = val
+                        break
+                        
+            for rec in records:
+                issue = str(rec.get("period", ""))
+                # 如果遇到上次抓過的期數，就停止
+                if stop_issue and issue == stop_issue: 
+                    break
                 
-                clean_line = re.sub(r'\d{2,3}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日', '', line)
-                clean_line = re.sub(r'\d{2,4}[/.\-]\d{1,2}[/.\-]\d{1,2}', '', clean_line)
-                clean_line = re.sub(r'\d{1,2}:\d{2}(:\d{2})?', '', clean_line)
+                # drawNumberSize 通常是「大小順序」的乾淨陣列
+                nums_str = rec.get("drawNumberSize", [])
+                nums = [int(n) for n in nums_str]
                 
-                if current_issue:
-                    numbers = re.findall(r'\b\d+\b', clean_line)
-                    for p in numbers:
-                        num = int(p)
-                        if 0 <= num <= 49 and str(num) != current_issue:
-                            current_draw.append(num)
-                            if len(current_draw) == target_balls:
-                                # ⭐️ 擷取正確號碼：前 N 顆是一般號，跳過中間排序，最後 1 顆是特別號
-                                final_nums = current_draw[:game_info["balls"]]
-                                if game_info["special"] > 0:
-                                    final_nums.append(current_draw[-1])
-                                    
-                                history_data.append([current_issue] + final_nums)
-                                current_issue = None 
-                                current_draw = []
-                                break
-                    if len(history_data) >= limit: break
+                # 處理特別號 / 威力彩的第二區
+                special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
+                
+                if game_info["special"] > 0 and special_num is not None:
+                    nums.append(int(special_num))
+                    
+                # 防呆：確認抓到的球數跟設定值一樣
+                if len(nums) == game_info["balls"] + game_info["special"]:
+                    history_data.append([issue] + nums)
+                    
             return history_data
+            
         except Exception as e:
-            try: driver.quit()
-            except: pass
+            st.error(f"抓取 {game_info['name']} 失敗: {e}")
             return []
 
     def get_google_sheet(self, game_name):
@@ -281,4 +278,5 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
