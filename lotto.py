@@ -5,10 +5,6 @@ import gspread
 import requests
 from collections import Counter
 from google.oauth2.service_account import Credentials
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 
 class TaiwanLotteryMaster:
     def __init__(self):
@@ -278,5 +274,6 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
