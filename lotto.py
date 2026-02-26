@@ -119,27 +119,41 @@ class TaiwanLotteryMaster:
         return db.worksheet(sheet_name)
 
     def auto_save_prediction(self, game_name, base_issue, picks):
-        """自動在背景將推薦號碼存入雲端，並避免重複儲存"""
+        """自動在背景將推薦號碼存入雲端，並嚴格避免重複儲存"""
         try:
             sheet = self.get_google_sheet("預測紀錄")
-            try:
-                records = sheet.get_all_records()
-            except:
-                # 如果是全新的空表，先寫入標題欄位
+            # 改用 get_all_values() 拿原始陣列，比對速度更快且不會因為標題名稱錯誤而當機
+            all_values = sheet.get_all_values()
+            
+            # 如果是全新空表，建立標題列
+            if not all_values:
                 headers = ["時間", "遊戲", "基準期數", "熱門", "冷門", "綜合", "拖牌"]
                 sheet.append_row(headers)
-                records = []
+                all_values = [headers]
+            else:
+                headers = all_values[0]
+            
+            # 找出對應欄位的索引值
+            if "遊戲" in headers and "基準期數" in headers:
+                game_idx = headers.index("遊戲")
+                issue_idx = headers.index("基準期數")
                 
-            # 檢查是否已經存過這一期的預測
-            for row in records:
-                if str(row.get('遊戲', '')) == game_name and str(row.get('基準期數', '')) == str(base_issue):
-                    return "exists" # 已經存過了，略過
-                    
-            # 沒存過，寫入新紀錄
+                # ⭐️ 嚴格防重複比對：略過第一行標題，逐行檢查
+                for row in all_values[1:]:
+                    if len(row) > max(game_idx, issue_idx):
+                        # 把頭尾空白去掉，全部轉成字串，避免 Google Sheet 數字格式搞鬼
+                        is_same_game = str(row[game_idx]).strip() == str(game_name).strip()
+                        is_same_issue = str(row[issue_idx]).strip() == str(base_issue).strip()
+                        
+                        if is_same_game and is_same_issue:
+                            return "exists" # 已經存過了，直接安全撤退！
+                            
+            # 確認沒存過，寫入新紀錄
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             row_data = [now, game_name, str(base_issue), picks['hot'], picks['cold'], picks['mixed'], picks['dragged']]
             sheet.append_row(row_data)
             return True
+            
         except Exception as e:
             return False
 
@@ -405,6 +419,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
