@@ -144,9 +144,15 @@ with tab1:
         
         st.subheader(f"📊 基準資料：最新開獎 (第 {latest_issue} 期)")
         st.info(f"👉 **開出號碼： {formatted_draw}**")
-        
+
         if picks:
             st.subheader("🎯 AI 智能實戰選號推薦")
+            
+            # ⭐️ 自動儲存機制：背景默默把推薦號碼存上雲端
+            save_status = engine.auto_save_prediction(game_info['name'], latest_issue, picks)
+            if save_status == True:
+                st.toast(f"✅ 【{game_info['name']}】第 {latest_issue} 期的 AI 預測已自動備份至雲端！", icon="💾")
+            
             col1, col2 = st.columns(2)
             with col1:
                 st.error(f"🔥 **策略一【全熱門號】**\n\n{picks['hot']}")
@@ -159,18 +165,9 @@ with tab1:
                 st.success(f"🧩 **策略四【拖牌精選】**\n\n{picks['dragged']}")
                 st.caption("根據最新期歷史軌跡拖出")
                 
-            st.write("") 
-            if st.button("💾 將本次預測號碼紀錄到雲端", type="secondary", use_container_width=True):
-                with st.spinner("正在寫入 Google 試算表..."):
-                    success = engine.save_prediction_record(game_info['name'], latest_issue, picks)
-                    if success:
-                        st.success("✅ 預測結果已成功儲存至「預測紀錄」分頁！")
-                        st.balloons()
-                    else:
-                        st.error("❌ 儲存失敗！請確認 Google 試算表中是否已建立「預測紀錄」分頁。")
-                
             st.markdown("---")
             st.subheader("🧩 最新期一般號碼「拖牌命中率」分析")
+            # ...(保留原本的拖牌分析顯示，不用修改)...
             dragged_stats = engine.get_dragged_analysis(full_db_df, game_info)
             if dragged_stats:
                 with st.expander("📊 點擊展開各號碼拖牌機率表", expanded=True):
@@ -189,31 +186,28 @@ with tab1:
                             st.divider()
                         col_idx += 1
             
+            # ⭐️ 全新的雲端真實回測對獎區塊
             st.markdown("---")
-            st.subheader("🏆 AI 歷史準確度回測 (包含特別號與獎金結算)")
-            with st.spinner("正在進行時光倒流回測..."):
-                accuracy_data = engine.calculate_prediction_accuracy(full_db_df, game_info)
+            st.subheader("🏆 AI 歷史準確度回測 (取自雲端真實預測紀錄)")
+            with st.spinner("正在從雲端讀取過往的預測紀錄進行自動對獎..."):
+                accuracy_data = engine.calculate_accuracy_from_cloud(full_db_df, game_info)
                 
             if accuracy_data:
                 actual_str = engine._format(accuracy_data['actual'])
-                # ⭐️ 顯示實際開出的特別號
                 if accuracy_data.get('actual_special') is not None:
-                    st.info(f"🎯 **第 {accuracy_data['issue']} 期實際開出： {actual_str} ➕ 特: {accuracy_data['actual_special']:02d}**")
+                    st.info(f"🎯 **驗證目標：第 {accuracy_data['issue']} 期 (對應第 {accuracy_data['base_issue']} 期產生的預測)**\n\n👉 **實際開出： {actual_str} ➕ 特: {accuracy_data['actual_special']:02d}**")
                 else:
-                    st.info(f"🎯 **第 {accuracy_data['issue']} 期實際開出： {actual_str}**")
+                    st.info(f"🎯 **驗證目標：第 {accuracy_data['issue']} 期 (對應第 {accuracy_data['base_issue']} 期產生的預測)**\n\n👉 **實際開出： {actual_str}**")
                     
                 cols = st.columns(2)
                 col_idx = 0
                 for strat_name, data in accuracy_data['strategies'].items():
                     with cols[col_idx % 2]:
-                        picks_str = engine._format(data['picks'])
+                        picks_str = engine._format(data['picks']) if data['picks'] else "無"
                         hits_str = engine._format(data['hits']) if data['hit_count'] > 0 else "無"
-                        
-                        # ⭐️ 處理特別號的顯示與命中狀態
                         sp_pick_str = f" ➕ 特: {data['pick_special']:02d}" if data.get('pick_special') is not None else ""
                         sp_hit_str = " (🎯命中特別號)" if data.get('special_hit') else ""
                         
-                        # ⭐️ 根據獎金狀態決定卡片的顏色 (綠色/黃色/紅色)
                         prize_text = data.get('prize', '無')
                         if prize_text not in ["槓龜", "無"]:
                             prize_display = f"💰 **獲得獎金：{prize_text}**"
@@ -225,16 +219,15 @@ with tab1:
                             prize_display = f"💨 獲得獎金：{prize_text}"
                             box_style = st.error
                             
-                        # 印出最終結果卡片
                         box_style(
                             f"**{strat_name}**\n\n"
-                            f"📝 預測：{picks_str}{sp_pick_str}\n\n"
-                            f"🎯 命中：{hits_str}{sp_hit_str}\n\n"
+                            f"📝 雲端紀錄：{picks_str}{sp_pick_str}\n\n"
+                            f"🎯 命中結果：{hits_str}{sp_hit_str}\n\n"
                             f"{prize_display}"
                         )
                     col_idx += 1
             else:
-                st.write("歷史數據不足，無法進行回測分析。")
+                st.warning("⚠️ 目前雲端尚無可驗證的歷史紀錄，或是你剛儲存的預測「尚未開出」。請等待下期開獎後再來對獎！")
 
         elif pos_data:
             st.subheader("🎯 位置熱度分析 (近 20 期)")
