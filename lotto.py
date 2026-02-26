@@ -53,7 +53,7 @@ class TaiwanLotteryMaster:
                 params = {
                     "month": month_str, # ⭐️ 核心修正：強制帶入月份參數 (例如 2024-02)
                     "pageNum": 1,
-                    "pageSize": 50
+                    "pageSize": 200
                 }
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
@@ -300,5 +300,6 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
