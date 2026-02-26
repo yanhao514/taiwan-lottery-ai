@@ -43,7 +43,12 @@ class TaiwanLotteryMaster:
             history_data = []
             current_issue = None
             current_draw = []
-            target_balls = game_info["balls"] + game_info["special"]
+            
+            # ⭐️ 核心修正：台彩網頁會同時顯示「落球順序」與「大小順序」，所以總數字量是兩倍
+            if game_info["type"] == "combo":
+                target_balls = game_info["balls"] * 2 + game_info["special"]
+            else:
+                target_balls = game_info["balls"]
             
             for line in lines:
                 line = line.strip()
@@ -65,7 +70,12 @@ class TaiwanLotteryMaster:
                         if 0 <= num <= 49 and str(num) != current_issue:
                             current_draw.append(num)
                             if len(current_draw) == target_balls:
-                                history_data.append([current_issue] + current_draw[:])
+                                # ⭐️ 擷取正確號碼：前 N 顆是一般號，跳過中間排序，最後 1 顆是特別號
+                                final_nums = current_draw[:game_info["balls"]]
+                                if game_info["special"] > 0:
+                                    final_nums.append(current_draw[-1])
+                                    
+                                history_data.append([current_issue] + final_nums)
                                 current_issue = None 
                                 current_draw = []
                                 break
@@ -271,3 +281,4 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
