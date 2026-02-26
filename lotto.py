@@ -25,11 +25,11 @@ class TaiwanLotteryMaster:
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
     def fetch_real_data(self, game_info, stop_issue=None, limit=200):
-        # 對應台彩 API 的端點名稱
+        # ⭐️ 修正 1：539 的 API 端點名稱改為 Daily539Result
         api_paths = {
             "lotto649": "Lotto649Result",
             "super_lotto638": "SuperLotto638Result",
-            "daily_cash": "DailyCashResult",
+            "daily_cash": "Daily539Result", 
             "4_d": "4DResult",
             "3_d": "3DResult"
         }
@@ -41,19 +41,17 @@ class TaiwanLotteryMaster:
         url = f"https://api.taiwanlottery.com/TLCAPIWeB/Lottery/{api_name}"
         history_data = []
         
-        # 取得現在的西元年份與月份
         now = datetime.now()
         year = now.year
         month = now.month
         
         try:
-            # ⭐️ 往前找 36 個月 (3年)，絕對夠湊滿 200 期
             for _ in range(36):
                 month_str = f"{year}-{month:02d}"
                 params = {
                     "month": month_str,
                     "pageNum": 1,
-                    "pageSize": 100  # ⭐️ 單月上限拉高到 100，確保不會被截斷
+                    "pageSize": 100
                 }
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
@@ -70,31 +68,32 @@ class TaiwanLotteryMaster:
                     issue = str(rec.get("period", ""))
                     if not issue: continue
                     
-                    # 若遇到已經存在 Google Sheet 的最新期數，則提早結束所有抓取
                     if stop_issue and issue == stop_issue: 
                         return history_data
                     
-                    nums_str = rec.get("drawNumberSize", [])
+                    # ⭐️ 修正 2：彈性抓取號碼。先找大小順序，找不到就找落球順序
+                    nums_str = rec.get("drawNumberSize")
+                    if not nums_str:  # 針對 3星彩、4星彩
+                        nums_str = rec.get("drawNumberAppear", [])
+                        
+                    if not nums_str:
+                        continue
+                        
                     nums = [int(n) for n in nums_str]
                     
-                    # 處理特別號/第二區
                     if game_info["special"] > 0:
                         special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
                         if special_num is not None:
                             nums.append(int(special_num))
                         
-                    # 檢查號碼數量是否符合預期
                     target_length = game_info["balls"] + game_info["special"]
                     if len(nums) == target_length:
-                        # 避免跨月抓到重複的期數
                         if not any(issue == existing[0] for existing in history_data):
                             history_data.append([issue] + nums)
                             
-                    # ⭐️ 如果已經抓滿設定的筆數 (200期)，就收工回傳
                     if len(history_data) >= limit:
                         return history_data
                 
-                # 準備抓取上個月的資料
                 month -= 1
                 if month == 0:
                     month = 12
@@ -103,7 +102,6 @@ class TaiwanLotteryMaster:
             return history_data
             
         except Exception as e:
-            # st.error(f"抓取 {game_info['name']} 失敗: {e}")
             return history_data
             
     def get_google_sheet(self, game_name):
@@ -302,6 +300,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
