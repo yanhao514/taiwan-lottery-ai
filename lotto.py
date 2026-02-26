@@ -39,54 +39,72 @@ class TaiwanLotteryMaster:
             return []
 
         url = f"https://api.taiwanlottery.com/TLCAPIWeB/Lottery/{api_name}"
-        params = {
-            "pageNum": 1,
-            "pageSize": limit
-        }
-        
         history_data = []
+        
+        # 取得現在的西元年份與月份
+        now = datetime.now()
+        year = now.year
+        month = now.month
+        
         try:
-            # 使用 requests 打 API，並加上 verify=False 繞過 SSL 憑證驗證
-            res = requests.get(url, params=params, timeout=10, verify=False)
-            data = res.json()
-            
-            records = []
-            if "content" in data:
-                # 動態尋找包含開獎紀錄的陣列 (不寫死 key 名稱)
-                for key, val in data.get("content", {}).items():
-                    if isinstance(val, list):
-                        records = val
-                        break
-                        
-            for rec in records:
-                issue = str(rec.get("period", ""))
-                if not issue: continue
+            # 往前找 6 個月，通常絕對夠湊滿 50 期資料
+            for _ in range(6):
+                month_str = f"{year}-{month:02d}"
+                params = {
+                    "month": month_str, # ⭐️ 核心修正：強制帶入月份參數 (例如 2024-02)
+                    "pageNum": 1,
+                    "pageSize": 50
+                }
                 
-                # 若遇到已經存在 Google Sheet 的最新期數，則停止抓取
-                if stop_issue and issue == stop_issue: 
-                    break
+                res = requests.get(url, params=params, timeout=10, verify=False)
+                data = res.json()
                 
-                # 取得一般號碼 (API 裡的 drawNumberSize 是依大小排序好的號碼)
-                nums_str = rec.get("drawNumberSize", [])
-                nums = [int(n) for n in nums_str]
-                
-                # 處理特別號/第二區
-                if game_info["special"] > 0:
-                    special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
-                    if special_num is not None:
-                        nums.append(int(special_num))
+                records = []
+                if "content" in data and data["content"]:
+                    for key, val in data["content"].items():
+                        if isinstance(val, list):
+                            records = val
+                            break
+                            
+                for rec in records:
+                    issue = str(rec.get("period", ""))
+                    if not issue: continue
                     
-                # 檢查號碼數量是否符合預期，避免寫入不完整的髒資料
-                target_length = game_info["balls"] + game_info["special"]
-                if len(nums) == target_length:
-                    history_data.append([issue] + nums)
+                    # 若遇到已經存在 Google Sheet 的最新期數，則提早結束所有抓取
+                    if stop_issue and issue == stop_issue: 
+                        return history_data
+                    
+                    nums_str = rec.get("drawNumberSize", [])
+                    nums = [int(n) for n in nums_str]
+                    
+                    # 處理特別號/第二區
+                    if game_info["special"] > 0:
+                        special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
+                        if special_num is not None:
+                            nums.append(int(special_num))
+                        
+                    # 檢查號碼數量是否符合預期
+                    target_length = game_info["balls"] + game_info["special"]
+                    if len(nums) == target_length:
+                        # 避免跨月抓到重複的期數
+                        if not any(issue == existing[0] for existing in history_data):
+                            history_data.append([issue] + nums)
+                            
+                    # 如果已經抓滿設定的筆數，就收工回傳
+                    if len(history_data) >= limit:
+                        return history_data
+                
+                # 準備抓取上個月的資料
+                month -= 1
+                if month == 0:
+                    month = 12
+                    year -= 1
                     
             return history_data
             
         except Exception as e:
-            # 若是在 Streamlit 畫面上，可以顯示錯誤訊息方便除錯
             # st.error(f"抓取 {game_info['name']} 失敗: {e}")
-            return []
+            return history_data
 
     def get_google_sheet(self, game_name):
         creds_dict = json.loads(st.secrets["google_credentials"])
@@ -282,3 +300,4 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
