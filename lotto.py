@@ -128,7 +128,9 @@ class TaiwanLotteryMaster:
     def sync_latest_data(self, game_info, old_df):
         sheet = self.get_google_sheet(game_info["name"])
         stop_issue = str(old_df.iloc[-1]['期數']) if not old_df.empty else None
-        new_data_list = self.fetch_real_data(game_info, stop_issue=stop_issue, limit=50)
+        
+        # ⭐️ 關鍵在這裡！把原本的 limit=50 改成 limit=200
+        new_data_list = self.fetch_real_data(game_info, stop_issue=stop_issue, limit=200)
         
         if new_data_list:
             columns = ['期數'] + [f'號碼{i+1}' for i in range(game_info["balls"])]
@@ -300,6 +302,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
