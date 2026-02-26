@@ -247,22 +247,55 @@ class TaiwanLotteryMaster:
         return analysis_result
 
     def calculate_prediction_accuracy(self, df, game_info):
+        # 只針對組合型遊戲回測
         if game_info["type"] != "combo" or len(df) < 22: return None
+        
         past_df = df.iloc[:-1].reset_index(drop=True)
         actual_latest_row = df.iloc[-1]
         actual_issue = actual_latest_row['期數']
         reg_cols = [f'號碼{i+1}' for i in range(game_info["balls"])]
         actual_draw = set([int(n) for n in actual_latest_row[reg_cols].values])
         
+        # ⭐️ 抓取實際開獎的特別號 (如果該遊戲有特別號的話)
+        actual_special = None
+        if game_info["special"] > 0 and "特別號" in actual_latest_row:
+            actual_special = int(actual_latest_row["特別號"])
+
         mock_picks = self.generate_ai_picks(past_df, game_info)
         if not mock_picks: return None
-        results = {"issue": actual_issue, "actual": actual_draw, "strategies": {}}
+        
+        # 將回傳結果擴充特別號與獎金欄位
+        results = {"issue": actual_issue, "actual": actual_draw, "actual_special": actual_special, "strategies": {}}
         strategies = [("hot", "🔥 策略一【全熱門號】"), ("cold", "❄️ 策略二【全冷門號】"), ("mixed", "🌗 策略三【冷熱各半】"), ("dragged", "🧩 策略四【拖牌精選】")]
+        
         for key, name in strategies:
-            pick_str = mock_picks[key].split(' ➕')[0] # 回測時先濾掉特別號字串
+            raw_pick_str = mock_picks[key]
+            
+            # ⭐️ 解析一般號碼與特別號 (利用我們自己定義的 ' ➕ 特:' 來切分)
+            parts = raw_pick_str.split(' ➕ 特:')
+            pick_str = parts[0]
+            pick_special = int(parts[1]) if len(parts) > 1 else None
+            
             pick_set = set([int(n) for n in pick_str.split(', ')])
             hits = pick_set.intersection(actual_draw)
-            results["strategies"][name] = {"picks": pick_set, "hits": hits, "hit_count": len(hits)}
+            
+            # ⭐️ 判斷特別號是否命中
+            special_hit = False
+            if game_info["special"] > 0 and pick_special is not None and actual_special is not None:
+                special_hit = (pick_special == actual_special)
+                
+            # ⭐️ 計算獲得的獎金
+            prize = self.get_prize_amount(game_info["name"], len(hits), special_hit)
+            
+            results["strategies"][name] = {
+                "picks": pick_set, 
+                "pick_special": pick_special,
+                "hits": hits, 
+                "hit_count": len(hits),
+                "special_hit": special_hit,
+                "prize": prize
+            }
+            
         return results
 
     def save_prediction_record(self, game_name, base_issue, picks):
@@ -337,6 +370,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
