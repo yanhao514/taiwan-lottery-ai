@@ -225,7 +225,7 @@ with tab1:
         # 👇 請把下面這三行加到 with tab1: 的最底部
         st.markdown("---")
         st.subheader("📁 歷史開獎資料庫預覽")
-        st.dataframe(full_db_df.tail(20).iloc[::-1], width='stretch')
+        st.dataframe(full_db_df.tail(100).iloc[::-1], width='stretch')
 
 with tab2:
     st.markdown("### ⚡️ 寧可信其有，偏方大集合")
