@@ -1,6 +1,7 @@
 import os, time, random, json
 import pandas as pd
 import streamlit as st
+import json
 import gspread
 import requests
 import urllib3
@@ -10,6 +11,16 @@ from datetime import datetime
 
 # 停用 SSL 不安全連線警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ⭐️ 建立快取連線 (放在 class 外面)
+# 這個裝飾器會讓 Streamlit 記住連線，避免重複登入消耗 Google API 額度
+@st.cache_resource
+def get_google_db():
+    creds_dict = json.loads(st.secrets["google_credentials"])
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+    return client.open("台彩大數據資料庫")
 
 class TaiwanLotteryMaster:
     def __init__(self):
@@ -106,17 +117,13 @@ class TaiwanLotteryMaster:
         except Exception as e:
             return history_data
 
-    def get_google_sheet(self, sheet_name):
-        creds_dict = json.loads(st.secrets["google_credentials"])
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        client = gspread.authorize(creds)
-        db = client.open("台彩大數據資料庫")
+   def get_google_sheet(self, sheet_name):
+        # ⭐️ 直接呼叫快取的資料庫，不再每次重新認證
+        db = get_google_db()
         
-        # ⭐️ 新增防呆機制：如果找不到指定分頁(如「預測紀錄」)，自動幫你建立一個
         worksheets = [ws.title for ws in db.worksheets()]
         if sheet_name not in worksheets:
-            db.add_worksheet(title=sheet_name, rows="1000", cols="20")
+            db.add_worksheet(title=sheet_name, rows="1000", cols="30")
             
         return db.worksheet(sheet_name)
 
@@ -447,6 +454,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
