@@ -125,9 +125,9 @@ class TaiwanLotteryMaster:
             # 改用 get_all_values() 拿原始陣列，比對速度更快且不會因為標題名稱錯誤而當機
             all_values = sheet.get_all_values()
             
-            # 如果是全新空表，建立標題列
+            # ⭐️ 如果是全新空表，建立標題列 (新增了第八個欄位：到期)
             if not all_values:
-                headers = ["時間", "遊戲", "基準期數", "熱門", "冷門", "綜合", "拖牌"]
+                headers = ["時間", "遊戲", "基準期數", "熱門", "冷門", "綜合", "拖牌", "到期"]
                 sheet.append_row(headers)
                 all_values = [headers]
             else:
@@ -148,9 +148,18 @@ class TaiwanLotteryMaster:
                         if is_same_game and is_same_issue:
                             return "exists" # 已經存過了，直接安全撤退！
                             
-            # 確認沒存過，寫入新紀錄
+            # 確認沒存過，寫入新紀錄 (⭐️ 陣列最後新增了 picks.get('overdue', ''))
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [now, game_name, str(base_issue), picks['hot'], picks['cold'], picks['mixed'], picks['dragged']]
+            row_data = [
+                now, 
+                game_name, 
+                str(base_issue), 
+                picks['hot'], 
+                picks['cold'], 
+                picks['mixed'], 
+                picks['dragged'], 
+                picks.get('overdue', '') # 確保即使舊資料沒有 overdue 也不會報錯
+            ]
             sheet.append_row(row_data)
             return True
             
@@ -158,7 +167,6 @@ class TaiwanLotteryMaster:
             return False
 
     def calculate_accuracy_from_cloud(self, df, game_info):
-        """直接從雲端讀取歷史預測紀錄，並與真實開獎結果進行對獎"""
         if df.empty or len(df) < 2: return None
         try:
             sheet = self.get_google_sheet("預測紀錄")
@@ -173,33 +181,33 @@ class TaiwanLotteryMaster:
             df['期數'] = df['期數'].astype(str)
             actual_issues = df['期數'].tolist()
             
-            # 從最新的預測紀錄開始往回找，找到第一筆「已經開獎」的紀錄來驗證
             for idx in range(len(pred_df)-1, -1, -1):
                 row = pred_df.iloc[idx]
                 base_issue = str(row.get('基準期數', ''))
                 
-                # 如果這筆預測的「基準期」存在於歷史資料中
                 if base_issue in actual_issues:
                     base_idx = actual_issues.index(base_issue)
-                    # 檢查這筆預測的「下一期 (目標期)」是不是已經開獎了
                     if base_idx + 1 < len(actual_issues): 
                         actual_draw_row = df.iloc[base_idx + 1]
                         target_issue = actual_draw_row['期數']
                         
-                        # 擷取真實開獎號碼
-                        reg_cols = [f'號碼{i+1}' for i in range(game_info["balls"])]
+                        reg_cols = [f'號碼{i+1}' for i in range(game_info["draw_balls"])]
                         actual_draw = set([int(n) for n in actual_draw_row[reg_cols].values])
                         actual_special = int(actual_draw_row["特別號"]) if game_info["special"] > 0 and "特別號" in actual_draw_row else None
                         
                         results = {"issue": target_issue, "base_issue": base_issue, "actual": actual_draw, "actual_special": actual_special, "strategies": {}}
+                        
+                        # ⭐️ 雲端驗證加入「到期補漏」策略
                         strategies = [("hot", "熱門", "🔥 策略一【全熱門號】"), 
                                       ("cold", "冷門", "❄️ 策略二【全冷門號】"), 
                                       ("mixed", "綜合", "🌗 策略三【冷熱各半】"), 
-                                      ("dragged", "拖牌", "🧩 策略四【拖牌精選】")]
+                                      ("dragged", "拖牌", "🧩 策略四【拖牌精選】"),
+                                      ("overdue", "到期", "⏳ 策略五【到期補漏】")]
                         
-                        # 進行對獎比對
                         for key, col_name, strat_name in strategies:
                             raw_pick_str = str(row.get(col_name, ""))
+                            if not raw_pick_str: continue # 如果舊資料沒有「到期」欄位就略過
+                            
                             parts = raw_pick_str.split(' ➕ 特:')
                             pick_str = parts[0]
                             pick_special = int(parts[1]) if len(parts) > 1 else None
@@ -221,7 +229,7 @@ class TaiwanLotteryMaster:
                                 "prize": prize,
                                 "raw_pick_str": raw_pick_str
                             }
-                        return results # 找到最近一期可驗證的紀錄就回傳
+                        return results 
             return None
         except Exception as e:
             return None
@@ -268,19 +276,17 @@ class TaiwanLotteryMaster:
             return combined_df, True
         return old_df, False
 
-    def generate_ai_picks(self, df, game_info):
+    def generate_ai_picks(self, df, game_info, window=20):
         if game_info["type"] != "combo" or df.empty: return None
-        
-        reg_cols = [f'號碼{i+1}' for i in range(game_info["balls"])]
+        reg_cols = [f'號碼{i+1}' for i in range(game_info["draw_balls"])]
         latest_row = df.iloc[-1]
         latest_issue = latest_row['期數']
-        
         balls_needed = game_info["balls"]
         max_num = game_info["max_num"]
         
-        # 一般號碼分析
-        recent_20_df = df.tail(20)[reg_cols]
-        recent_nums = recent_20_df.values.flatten()
+        # ⭐️ 加入分析區間 (window) 控制
+        recent_df = df.tail(window)[reg_cols]
+        recent_nums = recent_df.values.flatten()
         counts = Counter(recent_nums)
         hot_nums = [n for n, c in counts.most_common(balls_needed)]
         
@@ -294,6 +300,7 @@ class TaiwanLotteryMaster:
         cold_nums = random.sample(cold_pool, balls_needed) if len(cold_pool) >= balls_needed else cold_pool[:balls_needed]
         mixed_nums = hot_nums[:balls_needed//2] + cold_nums[:balls_needed - (balls_needed//2)]
         
+        # 拖牌分析
         nums_df = df[reg_cols]
         correlation_map = {}
         for i in range(len(nums_df) - 1):
@@ -313,10 +320,20 @@ class TaiwanLotteryMaster:
             if len(dragged_nums) >= balls_needed: break
             if n not in dragged_nums: dragged_nums.append(n)
 
-        # 特別號獨立分析
-        s_hot_str = s_cold_str = s_mix_str = s_drag_str = ""
+        # ⭐️ 新增：到期策略 (尋找連續最久未出現的號碼)
+        last_seen = {n: 9999 for n in range(1, max_num + 1)}
+        for idx, row in enumerate(df.iloc[::-1].iterrows()):
+            draw_nums = row[1][reg_cols].values
+            for num in draw_nums:
+                if last_seen[int(num)] == 9999:
+                    last_seen[int(num)] = idx
+        overdue_pool = sorted(last_seen.keys(), key=lambda x: last_seen[x], reverse=True)
+        overdue_nums = overdue_pool[:balls_needed]
+
+        # 特別號處理
+        s_hot_str = s_cold_str = s_mix_str = s_drag_str = s_overdue_str = ""
         if game_info["special"] > 0:
-            s_history = df["特別號"].tail(20).values
+            s_history = df["特別號"].tail(window).values
             s_counts = Counter(s_history)
             s_hot = s_counts.most_common(1)[0][0]
             s_pool = set(range(1, game_info["s_max"] + 1))
@@ -324,17 +341,26 @@ class TaiwanLotteryMaster:
             s_cold = random.choice(s_cold_list) if s_cold_list else s_counts.most_common()[-1][0]
             s_mix = random.choice([s_hot, s_cold])
             
+            # 尋找最久未開出的特別號
+            s_last_seen = {n: 9999 for n in range(1, game_info["s_max"] + 1)}
+            for idx, val in enumerate(df["特別號"].iloc[::-1]):
+                if s_last_seen[int(val)] == 9999:
+                    s_last_seen[int(val)] = idx
+            s_overdue = sorted(s_last_seen.keys(), key=lambda x: s_last_seen[x], reverse=True)[0]
+            
             s_hot_str = f" ➕ 特:{s_hot:02d}"
             s_cold_str = f" ➕ 特:{s_cold:02d}"
             s_mix_str = f" ➕ 特:{s_mix:02d}"
             s_drag_str = f" ➕ 特:{s_hot:02d}" 
+            s_overdue_str = f" ➕ 特:{s_overdue:02d}" 
         
         return {
             "latest_issue": latest_issue, 
             "hot": self._format(hot_nums) + s_hot_str,
             "cold": self._format(cold_nums) + s_cold_str,
             "mixed": self._format(mixed_nums) + s_mix_str, 
-            "dragged": self._format(dragged_nums) + s_drag_str
+            "dragged": self._format(dragged_nums) + s_drag_str,
+            "overdue": self._format(overdue_nums) + s_overdue_str # ⭐️ 回傳到期號碼
         }
 
     def get_dragged_analysis(self, df, game_info):
@@ -419,6 +445,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
