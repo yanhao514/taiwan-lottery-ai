@@ -45,7 +45,7 @@ class TaiwanLotteryMaster:
             "daily_cash": "Daily539Result", 
             "4_d": "4DResult",
             "3_d": "3DResult",
-            "bingo": "BINGOBINGOResult"  # 👈 就是這裡！
+            "bingo_bingp": "BINGOBINGOResult"  # 👈 就是這裡！
         }
         
         api_name = api_paths.get(game_info["path"])
@@ -455,6 +455,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
