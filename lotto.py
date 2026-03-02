@@ -13,12 +13,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class TaiwanLotteryMaster:
     def __init__(self):
+        # ⭐️ 請完整複製這一段，確保 6 種遊戲都有自己專屬的 draw_balls 設定！
         self.games = {
-            "1": {"name": "大樂透", "type": "combo", "balls": 6, "special": 1, "path": "lotto649", "max_num": 49, "s_max": 49},
-            "2": {"name": "威力彩", "type": "combo", "balls": 6, "special": 1, "path": "super_lotto638", "max_num": 38, "s_max": 8},
-            "3": {"name": "今彩539", "type": "combo", "balls": 5, "special": 0, "path": "daily_cash", "max_num": 39},
-            "4": {"name": "4星彩", "type": "position", "balls": 4, "special": 0, "path": "4_d", "max_num": 9},
-            "5": {"name": "3星彩", "type": "position", "balls": 3, "special": 0, "path": "3_d", "max_num": 9}
+            "1": {"name": "大樂透", "type": "combo", "balls": 6, "draw_balls": 6, "special": 1, "path": "lotto649", "max_num": 49, "s_max": 49},
+            "2": {"name": "威力彩", "type": "combo", "balls": 6, "draw_balls": 6, "special": 1, "path": "super_lotto638", "max_num": 38, "s_max": 8},
+            "3": {"name": "今彩539", "type": "combo", "balls": 5, "draw_balls": 5, "special": 0, "path": "daily_cash", "max_num": 39},
+            "4": {"name": "4星彩", "type": "position", "balls": 4, "draw_balls": 4, "special": 0, "path": "4_d", "max_num": 9},
+            "5": {"name": "3星彩", "type": "position", "balls": 3, "draw_balls": 3, "special": 0, "path": "3_d", "max_num": 9},
+            "6": {"name": "賓果賓果", "type": "combo", "balls": 10, "draw_balls": 20, "special": 1, "path": "bingo", "max_num": 80, "s_max": 80}
         }
 
     def _format(self, nums):
@@ -445,6 +447,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
