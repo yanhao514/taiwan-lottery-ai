@@ -38,13 +38,14 @@ class TaiwanLotteryMaster:
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
     def fetch_real_data(self, game_info, stop_issue=None, limit=200):
-        # ⭐️ 修正 1：539 的 API 端點名稱改為 Daily539Result
+        # ⭐️ 補上 bingo 的 API 端點
         api_paths = {
             "lotto649": "Lotto649Result",
             "super_lotto638": "SuperLotto638Result",
             "daily_cash": "Daily539Result", 
             "4_d": "4DResult",
-            "3_d": "3DResult"
+            "3_d": "3DResult",
+            "bingo": "BINGOBINGOResult"  # 👈 就是這裡！
         }
         
         api_name = api_paths.get(game_info["path"])
@@ -84,9 +85,8 @@ class TaiwanLotteryMaster:
                     if stop_issue and issue == stop_issue: 
                         return history_data
                     
-                    # ⭐️ 修正 2：彈性抓取號碼。先找大小順序，找不到就找落球順序
                     nums_str = rec.get("drawNumberSize")
-                    if not nums_str:  # 針對 3星彩、4星彩
+                    if not nums_str:  
                         nums_str = rec.get("drawNumberAppear", [])
                         
                     if not nums_str:
@@ -94,12 +94,13 @@ class TaiwanLotteryMaster:
                         
                     nums = [int(n) for n in nums_str]
                     
+                    # ⭐️ 這裡也更新了！加入 superPrizeNo 來捕捉賓果的超級獎號
                     if game_info["special"] > 0:
-                        special_num = rec.get("specialNumber") or rec.get("secondZoneNumber")
+                        special_num = rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
                         if special_num is not None:
                             nums.append(int(special_num))
                         
-                    target_length = game_info["balls"] + game_info["special"]
+                    target_length = game_info["draw_balls"] + game_info["special"]
                     if len(nums) == target_length:
                         if not any(issue == existing[0] for existing in history_data):
                             history_data.append([issue] + nums)
@@ -454,6 +455,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
