@@ -121,8 +121,19 @@ with tab1:
     st.markdown("---")
     
     if not full_db_df.empty:
+        # ⭐️ 新增分析區間選擇器 (Radio Buttons)
+        st.markdown("---")
+        st.subheader("⚙️ 分析參數設定")
+        selected_window = st.radio(
+            "選擇要分析多少近期開獎數據？",
+            options=[20, 50, 100],
+            format_func=lambda x: f"近 {x} 期",
+            horizontal=True
+        )
+
         if game_info["type"] == "combo":
-            picks = engine.generate_ai_picks(full_db_df, game_info)
+            # ⭐️ 把選定的區間參數傳給 AI 運算
+            picks = engine.generate_ai_picks(full_db_df, game_info, window=selected_window)
             pos_data = None
         else:
             picks = None
@@ -131,9 +142,8 @@ with tab1:
         latest_row = full_db_df.iloc[-1]
         latest_issue = latest_row['期數']
         
-        # 處理最新開獎顯示 (包含特別號)
         if game_info["type"] == "combo":
-            reg_cols = [f'號碼{i+1}' for i in range(game_info["balls"])]
+            reg_cols = [f'號碼{i+1}' for i in range(game_info["draw_balls"])]
             reg_draw = ", ".join([f"{int(n):02d}" for n in latest_row[reg_cols].values])
             if game_info["special"] > 0:
                 formatted_draw = f"{reg_draw} ➕ 特: {int(latest_row['特別號']):02d}"
@@ -142,28 +152,31 @@ with tab1:
         else:
             formatted_draw = ", ".join([str(int(n)) for n in latest_row.drop('期數').values])
         
+        st.markdown("---")
         st.subheader(f"📊 基準資料：最新開獎 (第 {latest_issue} 期)")
         st.info(f"👉 **開出號碼： {formatted_draw}**")
-
+        
         if picks:
             st.subheader("🎯 AI 智能實戰選號推薦")
             
-            # ⭐️ 自動儲存機制：背景默默把推薦號碼存上雲端，且防重複！
             save_status = engine.auto_save_prediction(game_info['name'], latest_issue, picks)
             if save_status == True:
                 st.toast(f"✅ 【{game_info['name']}】第 {latest_issue} 期的預測已自動備份！", icon="💾")
             elif save_status == "exists":
                 st.toast(f"📌 第 {latest_issue} 期預測早已存檔，自動略過重複寫入。", icon="🛡️")
             
+            # ⭐️ 排版更新：放入 5 種策略
             col1, col2 = st.columns(2)
             with col1:
                 st.error(f"🔥 **策略一【全熱門號】**\n\n{picks['hot']}")
-                st.caption("一般號近20期最常開出")
+                st.caption(f"近 {selected_window} 期最常開出")
                 st.warning(f"🌗 **策略三【冷熱各半】**\n\n{picks['mixed']}")
                 st.caption("結合策略一與策略二")
+                st.info(f"⏳ **策略五【到期補漏】**\n\n{picks['overdue']}")
+                st.caption("歷史資料中連續最久未開出的號碼")
             with col2:
                 st.info(f"❄️ **策略二【全冷門號】**\n\n{picks['cold']}")
-                st.caption("一般號近20期極少開出")
+                st.caption(f"近 {selected_window} 期極少開出")
                 st.success(f"🧩 **策略四【拖牌精選】**\n\n{picks['dragged']}")
                 st.caption("根據最新期歷史軌跡拖出")
                 
