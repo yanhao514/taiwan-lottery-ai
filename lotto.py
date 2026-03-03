@@ -36,13 +36,14 @@ class TaiwanLotteryMaster:
         return ", ".join([f"{int(n):02d}" for n in sorted(nums)])
 
     def fetch_real_data(self, game_info, stop_issue=None, limit=200):
+        # ⭐️ 替換成你親手挖出來的終極歷史端點！
         api_paths = {
             "lotto649": "Lotto649Result",
             "super_lotto638": "SuperLotto638Result",
             "daily_cash": "Daily539Result", 
             "4_d": "4DResult",
             "3_d": "3DResult",
-            "bingo": "LatestBingoResult" 
+            "bingo": "BingoResult" 
         }
         
         api_name = api_paths.get(game_info["path"])
@@ -52,6 +53,8 @@ class TaiwanLotteryMaster:
         url = f"https://api.taiwanlottery.com/TLCAPIWeB/Lottery/{api_name}"
         history_data = []
         
+        # 為了計算「前一天」，我們需要引入 timedelta
+        from datetime import datetime, timedelta
         now = datetime.now()
         year = now.year
         month = now.month
@@ -61,9 +64,20 @@ class TaiwanLotteryMaster:
             
             for loop_idx in range(36):
                 if is_bingo:
-                    params = {"pageNum": loop_idx + 1, "pageSize": 100}
+                    # ⭐️ 賓果專屬邏輯：用 openDate 一天一天往回找，一次抓 200 筆
+                    target_date = now - timedelta(days=loop_idx)
+                    params = {
+                        "openDate": target_date.strftime("%Y-%m-%d"),
+                        "pageNum": 1, 
+                        "pageSize": 200 
+                    }
                 else:
-                    params = {"month": f"{year}-{month:02d}", "pageNum": 1, "pageSize": 100}
+                    # 一般彩券邏輯：用 month 一個月一個月找
+                    params = {
+                        "month": f"{year}-{month:02d}", 
+                        "pageNum": 1, 
+                        "pageSize": 100
+                    }
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
                 data = res.json()
@@ -71,35 +85,34 @@ class TaiwanLotteryMaster:
                 records = []
                 if "content" in data and data["content"]:
                     content_data = data["content"]
-                    # 情況 A：一般彩券的陣列格式
+                    # 尋找陣列資料
                     for key, val in content_data.items():
                         if isinstance(val, list):
                             records = val
                             break
-                    # 情況 B：賓果賓果的單筆格式 (LatestBingoResult)
-                    if not records and "lotteryBingoLatestPost" in content_data:
-                        records = [content_data["lotteryBingoLatestPost"]]
-                        
-                # 防呆：如果 API 回傳空的，代表抓到底了
+                            
+                # 防呆：如果那天沒開獎(例如過年休假)，不要停止，繼續找前一天/前一個月
                 if not records:
-                    break
+                    if not is_bingo:
+                        month -= 1
+                        if month == 0:
+                            month = 12
+                            year -= 1
+                    continue
                             
                 for rec in records:
-                    # ⭐️ 1. 抓期數 (相容 period 與 drawTerm)
                     issue = str(rec.get("drawTerm") or rec.get("period", ""))
                     if not issue: continue
                     
                     if stop_issue and issue == stop_issue: 
                         return history_data
                     
-                    # ⭐️ 2. 抓號碼 (相容 bigShowOrder 與 drawNumberSize)
                     nums_str = rec.get("bigShowOrder") or rec.get("drawNumberSize") or rec.get("openShowOrder") or rec.get("drawNumberAppear", [])
                     if not nums_str:
                         continue
                         
                     nums = [int(n) for n in nums_str]
                     
-                    # ⭐️ 3. 抓特別號 (相容 prizeNum.bullEye 與 superPrizeNo)
                     if game_info["special"] > 0:
                         prize_num = rec.get("prizeNum", {})
                         if isinstance(prize_num, dict) and "bullEye" in prize_num:
@@ -107,17 +120,17 @@ class TaiwanLotteryMaster:
                         else:
                             special_num = rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
                             
-                        # 確保超級獎號是數字 (有時候剛開獎會顯示 '－')
                         if special_num is not None and str(special_num).isdigit():
                             nums.append(int(special_num))
                         elif is_bingo:
-                            nums.append(0) # 剛開獎還沒算出超級獎號時補0
+                            nums.append(0) 
                         
                     target_length = game_info["draw_balls"] + game_info["special"]
                     if len(nums) == target_length:
                         if not any(issue == existing[0] for existing in history_data):
                             history_data.append([issue] + nums)
                             
+                    # 如果抓滿了設定的筆數，就收工回傳！
                     if len(history_data) >= limit:
                         return history_data
                 
@@ -443,6 +456,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
