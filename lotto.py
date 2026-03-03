@@ -99,6 +99,12 @@ class TaiwanLotteryMaster:
                     continue
                             
                 for rec in records:
+                    # ⭐️ 輕量級 X 光機：看看歷史紀錄的特別號到底被改成什麼名字！
+                    if is_bingo:
+                        st.warning(f"🕵️‍♂️ 歷史資料的欄位有：{list(rec.keys())}")
+                        st.json(rec)
+                        st.stop()
+                    
                     issue = str(rec.get("drawTerm") or rec.get("period", ""))
                     if not issue: continue
                     
@@ -465,6 +471,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
