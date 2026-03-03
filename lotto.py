@@ -66,12 +66,14 @@ class TaiwanLotteryMaster:
                 }
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
-                data = res.json()
                 
-                # ⭐️ 賓果除錯用：把真實的錯誤原因印在畫面上
+                # ⭐️ 核心修正：把除錯印出移到 json 解析的前面！
                 if game_info["name"] == "賓果賓果":
                     st.error(f"除錯網址：{res.url}")
-                    st.warning(f"除錯回傳：{str(data)[:300]}")
+                    st.warning(f"HTTP 狀態碼：{res.status_code}")
+                    st.info(f"真實回傳內容：{res.text[:200]}")
+                
+                data = res.json()
                 
                 records = []
                 if "content" in data and data["content"]:
@@ -430,3 +432,4 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
