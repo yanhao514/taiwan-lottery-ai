@@ -311,28 +311,42 @@ class TaiwanLotteryMaster:
         return analysis_result
 
     def auto_save_prediction(self, game_name, base_issue, picks):
+        """自動在背景將推薦號碼存入雲端，並嚴格避免重複儲存"""
         try:
             sheet = self.get_google_sheet("預測紀錄")
             all_values = sheet.get_all_values()
+            
             if not all_values:
                 headers = ["時間", "遊戲", "基準期數", "熱門", "冷門", "綜合", "拖牌", "到期"]
                 sheet.append_row(headers)
                 all_values = [headers]
             else:
-                headers = all_values[0]
+                # ⭐️ 鈦合金防護 1：強制清除標題列的所有隱形空白
+                headers = [str(h).strip() for h in all_values[0]]
             
             if "遊戲" in headers and "基準期數" in headers:
                 game_idx = headers.index("遊戲")
                 issue_idx = headers.index("基準期數")
+                
+                # 取得乾淨的目標比對值
+                target_game = str(game_name).strip()
+                target_issue = str(base_issue).strip().replace(".0", "")
+                
                 for row in all_values[1:]:
                     if len(row) > max(game_idx, issue_idx):
-                        if str(row[game_idx]).strip() == str(game_name).strip() and str(row[issue_idx]).strip() == str(base_issue).strip():
-                            return "exists"
+                        # ⭐️ 鈦合金防護 2：強制清除雲端資料的空白與雞婆的 .0
+                        sheet_game = str(row[game_idx]).strip()
+                        sheet_issue = str(row[issue_idx]).strip().replace(".0", "")
+                        
+                        if sheet_game == target_game and sheet_issue == target_issue:
+                            return "exists" # 抓到重複，安全撤退！
                             
+            # 確認沒存過，寫入新紀錄
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             row_data = [now, game_name, str(base_issue), picks['hot'], picks['cold'], picks['mixed'], picks['dragged'], picks.get('overdue', '')]
             sheet.append_row(row_data)
             return True
+            
         except Exception as e:
             return False
 
@@ -469,6 +483,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
