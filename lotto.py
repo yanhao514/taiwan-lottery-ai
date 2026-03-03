@@ -81,6 +81,13 @@ class TaiwanLotteryMaster:
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
                 data = res.json()
+
+                # ⭐️ 終極 X 光機 2.0：直接抓出兇手！
+                if is_bingo:
+                    st.error(f"🛑 檢查點 1：現在的停止點 (stop_issue) 是：{stop_issue}")
+                    st.warning(f"📡 檢查點 2：成功連線網址：{res.url}")
+                    st.json(data) # 印出資料結構
+                    st.stop()     # 強制暫停
                 
                 records = []
                 if "content" in data and data["content"]:
@@ -456,6 +463,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
