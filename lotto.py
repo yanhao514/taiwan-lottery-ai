@@ -81,7 +81,6 @@ class TaiwanLotteryMaster:
                 records = []
                 if "content" in data and data["content"]:
                     content_data = data["content"]
-                    # ⭐️ 確保能精準抓到賓果的 bingoQueryResult 陣列
                     if is_bingo and "bingoQueryResult" in content_data:
                         records = content_data["bingoQueryResult"]
                     else:
@@ -99,12 +98,6 @@ class TaiwanLotteryMaster:
                     continue
                             
                 for rec in records:
-                    # ⭐️ 輕量級 X 光機：看看歷史紀錄的特別號到底被改成什麼名字！
-                    if is_bingo:
-                        st.warning(f"🕵️‍♂️ 歷史資料的欄位有：{list(rec.keys())}")
-                        st.json(rec)
-                        st.stop()
-                    
                     issue = str(rec.get("drawTerm") or rec.get("period", ""))
                     if not issue: continue
                     
@@ -119,10 +112,11 @@ class TaiwanLotteryMaster:
                     
                     if game_info["special"] > 0:
                         prize_num = rec.get("prizeNum", {})
+                        # ⭐️ 終極修復：同時支援 bullEye (最新) 與 bullEyeTop (歷史)
                         if isinstance(prize_num, dict) and "bullEye" in prize_num:
                             special_num = prize_num.get("bullEye")
                         else:
-                            special_num = rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
+                            special_num = rec.get("bullEyeTop") or rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
                             
                         if special_num is not None and str(special_num).isdigit():
                             nums.append(int(special_num))
@@ -471,6 +465,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
