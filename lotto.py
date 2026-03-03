@@ -70,6 +70,10 @@ class TaiwanLotteryMaster:
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
                 data = res.json()
+                # ⭐️ 如果是賓果，直接把台彩的真實回傳印在畫面上！
+                if game_info["name"] == "賓果賓果":
+                    st.error(f"除錯網址：{res.url}")
+                    st.warning(f"除錯回傳：{str(data)[:300]}")
                 
                 records = []
                 if "content" in data and data["content"]:
@@ -455,6 +459,7 @@ class TaiwanLotteryMaster:
 if __name__ == "__main__":
     app = TaiwanLotteryMaster()
     app.run()
+
 
 
 
