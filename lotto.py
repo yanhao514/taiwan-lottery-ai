@@ -104,24 +104,28 @@ class TaiwanLotteryMaster:
                     if stop_issue and issue == stop_issue: 
                         return history_data
                     
-                    nums_str = rec.get("bigShowOrder") or rec.get("drawNumberSize") or rec.get("openShowOrder") or rec.get("drawNumberAppear", [])
+                    # 取出 20 顆球 (依大小排序)
+                    nums_str = rec.get("bigShowOrder") or rec.get("drawNumberSize") or rec.get("drawNumberAppear", [])
                     if not nums_str:
                         continue
                         
                     nums = [int(n) for n in nums_str]
                     
                     if game_info["special"] > 0:
-                        prize_num = rec.get("prizeNum", {})
-                        # ⭐️ 終極修復：同時支援 bullEye (最新) 與 bullEyeTop (歷史)
-                        if isinstance(prize_num, dict) and "bullEye" in prize_num:
-                            special_num = prize_num.get("bullEye")
+                        if is_bingo:
+                            # ⭐️ 採用玩家神邏輯：直接抓「開出順序」的最後一顆球當特別號！
+                            open_order = rec.get("openShowOrder", [])
+                            if open_order and len(open_order) > 0:
+                                nums.append(int(open_order[-1]))
+                            else:
+                                # 備用防呆方案 (萬一台彩連開出順序都沒給)
+                                sp = rec.get("bullEyeTop") or rec.get("superPrizeNo")
+                                nums.append(int(sp) if sp and str(sp).isdigit() else 0)
                         else:
-                            special_num = rec.get("bullEyeTop") or rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
-                            
-                        if special_num is not None and str(special_num).isdigit():
-                            nums.append(int(special_num))
-                        elif is_bingo:
-                            nums.append(0) 
+                            # 一般彩券的特別號抓法
+                            special_num = rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
+                            if special_num is not None and str(special_num).isdigit():
+                                nums.append(int(special_num))
                         
                     target_length = game_info["draw_balls"] + game_info["special"]
                     if len(nums) == target_length:
@@ -465,6 +469,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
