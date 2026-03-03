@@ -188,12 +188,15 @@ class TaiwanLotteryMaster:
             return combined_df, True
         return old_df, False
 
-    def generate_ai_picks(self, df, game_info, window=20):
+    # ⭐️ 升級 1：多了一個 custom_balls 參數
+    def generate_ai_picks(self, df, game_info, window=20, custom_balls=None):
         if game_info["type"] != "combo" or df.empty: return None
         reg_cols = [f'號碼{i+1}' for i in range(game_info["draw_balls"])]
         latest_row = df.iloc[-1]
         latest_issue = latest_row['期數']
-        balls_needed = game_info["balls"]
+        
+        # ⭐️ 升級 2：讓 AI 根據使用者的拉桿決定要選幾顆球
+        balls_needed = custom_balls if custom_balls is not None else game_info["balls"]
         max_num = game_info["max_num"]
         
         recent_df = df.tail(window)[reg_cols]
@@ -241,18 +244,27 @@ class TaiwanLotteryMaster:
 
         s_hot_str = s_cold_str = s_mix_str = s_drag_str = s_overdue_str = ""
         if game_info["special"] > 0:
-            s_history = df["特別號"].tail(window).values
-            s_counts = Counter(s_history)
-            s_hot = s_counts.most_common(1)[0][0]
-            s_pool = set(range(1, game_info["s_max"] + 1))
-            s_cold_list = list(s_pool - set(s_counts.keys()))
-            s_cold = random.choice(s_cold_list) if s_cold_list else s_counts.most_common()[-1][0]
+            # ⭐️ 升級 3：過濾掉 0 或無效數字，避免 Counter 當機
+            valid_s_history = [int(x) for x in df["特別號"].tail(window).values if int(x) > 0 and int(x) <= game_info["s_max"]]
+            
+            if valid_s_history:
+                s_counts = Counter(valid_s_history)
+                s_hot = s_counts.most_common(1)[0][0]
+                s_cold_list = list(set(range(1, game_info["s_max"] + 1)) - set(s_counts.keys()))
+                s_cold = random.choice(s_cold_list) if s_cold_list else s_counts.most_common()[-1][0]
+            else:
+                s_hot = random.randint(1, game_info["s_max"])
+                s_cold = random.randint(1, game_info["s_max"])
+                
             s_mix = random.choice([s_hot, s_cold])
             
             s_last_seen = {n: 9999 for n in range(1, game_info["s_max"] + 1)}
             for idx, val in enumerate(df["特別號"].iloc[::-1]):
-                if s_last_seen[int(val)] == 9999:
-                    s_last_seen[int(val)] = idx
+                val_int = int(val)
+                # ⭐️ 升級 4 (最重要)：安全鎖，確定數字真的在 1~s_max 名單內，才去查字典！
+                if val_int in s_last_seen and s_last_seen[val_int] == 9999:
+                    s_last_seen[val_int] = idx
+                    
             s_overdue = sorted(s_last_seen.keys(), key=lambda x: s_last_seen[x], reverse=True)[0]
             
             s_hot_str = f" ➕ 特:{s_hot:02d}"
@@ -453,6 +465,7 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
 
