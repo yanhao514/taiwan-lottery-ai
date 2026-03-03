@@ -42,7 +42,8 @@ class TaiwanLotteryMaster:
             "daily_cash": "Daily539Result", 
             "4_d": "4DResult",
             "3_d": "3DResult",
-            "bingo": "BINGOBINGOResult" 
+            # ⭐️ 換上你親手挖出來的終極密碼！
+            "bingo": "LatestBingoResult" 
         }
         
         api_name = api_paths.get(game_info["path"])
@@ -57,22 +58,26 @@ class TaiwanLotteryMaster:
         month = now.month
         
         try:
-            for _ in range(36):
-                month_str = f"{year}-{month:02d}"
-                params = {
-                    "month": month_str,
-                    "pageNum": 1,
-                    "pageSize": 100
-                }
+            # ⭐️ 針對賓果與一般彩券的特殊分流處理
+            is_bingo = (game_info["name"] == "賓果賓果")
+            
+            for loop_idx in range(36):
+                if is_bingo:
+                    # 賓果一天開200多期，我們不用「月份」找，直接用「頁數」往下翻
+                    params = {
+                        "pageNum": loop_idx + 1, 
+                        "pageSize": 100
+                    }
+                else:
+                    # 一般彩券維持用「月份」往下找
+                    month_str = f"{year}-{month:02d}"
+                    params = {
+                        "month": month_str,
+                        "pageNum": 1,
+                        "pageSize": 100
+                    }
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
-                
-                # ⭐️ 核心修正：把除錯印出移到 json 解析的前面！
-                if game_info["name"] == "賓果賓果":
-                    st.error(f"除錯網址：{res.url}")
-                    st.warning(f"HTTP 狀態碼：{res.status_code}")
-                    st.info(f"真實回傳內容：{res.text[:200]}")
-                
                 data = res.json()
                 
                 records = []
@@ -81,6 +86,10 @@ class TaiwanLotteryMaster:
                         if isinstance(val, list):
                             records = val
                             break
+                            
+                # ⭐️ 防呆：如果 API 回傳空的陣列，代表抓到底了，直接收工
+                if not records:
+                    break
                             
                 for rec in records:
                     issue = str(rec.get("period", ""))
@@ -98,6 +107,7 @@ class TaiwanLotteryMaster:
                         
                     nums = [int(n) for n in nums_str]
                     
+                    # 捕捉賓果的超級獎號或一般特別號
                     if game_info["special"] > 0:
                         special_num = rec.get("superPrizeNo") or rec.get("specialNumber") or rec.get("secondZoneNumber")
                         if special_num is not None:
@@ -105,16 +115,20 @@ class TaiwanLotteryMaster:
                         
                     target_length = game_info["draw_balls"] + game_info["special"]
                     if len(nums) == target_length:
+                        # 避免抓到重複期數
                         if not any(issue == existing[0] for existing in history_data):
                             history_data.append([issue] + nums)
                             
+                    # 如果抓滿了設定的筆數 (預設200期)，就回傳資料
                     if len(history_data) >= limit:
                         return history_data
                 
-                month -= 1
-                if month == 0:
-                    month = 12
-                    year -= 1
+                # 一般彩券才需要切換月份，賓果不用
+                if not is_bingo:
+                    month -= 1
+                    if month == 0:
+                        month = 12
+                        year -= 1
                     
             return history_data
             
@@ -432,4 +446,5 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
