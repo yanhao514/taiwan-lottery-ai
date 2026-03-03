@@ -121,9 +121,10 @@ with tab1:
     st.markdown("---")
     
     if not full_db_df.empty:
-        # ⭐️ 新增分析區間選擇器 (Radio Buttons)
         st.markdown("---")
         st.subheader("⚙️ 分析參數設定")
+        
+        # 1. 選擇分析區間
         selected_window = st.radio(
             "選擇要分析多少近期開獎數據？",
             options=[20, 50, 100],
@@ -131,6 +132,19 @@ with tab1:
             horizontal=True
         )
 
+        # ⭐️ 這裡就是 app.py 升級的核心：加上賓果專屬的星數拉桿！
+        custom_balls = None
+        if game_info["name"] == "賓果賓果":
+            custom_balls = st.slider("🔢 選擇預測星數 (1~10星)", min_value=1, max_value=10, value=10)
+
+        # 2. 呼叫 AI 運算大腦
+        if game_info["type"] == "combo":
+            # ⭐️ 把 custom_balls 這個變數傳遞給後端！
+            picks = engine.generate_ai_picks(full_db_df, game_info, window=selected_window, custom_balls=custom_balls)
+            pos_data = None
+        else:
+            picks = None
+            pos_data = engine.get_positional_analysis(full_db_df, game_info)
         if game_info["type"] == "combo":
             # ⭐️ 把選定的區間參數傳給 AI 運算
             picks = engine.generate_ai_picks(full_db_df, game_info, window=selected_window)
