@@ -79,6 +79,12 @@ class TaiwanLotteryMaster:
                 
                 res = requests.get(url, params=params, timeout=10, verify=False)
                 data = res.json()
+
+                # ⭐️ 終極 X 光機：直接把 API 的底褲印在網頁上！
+                if is_bingo:
+                    st.warning(f"📡 成功連線！除錯網址：{res.url}")
+                    st.json(data)  # Streamlit 會自動把 JSON 畫成漂亮的樹狀圖
+                    st.stop()      # 強制暫停程式，讓我們好好看清楚資料結構！
                 
                 records = []
                 if "content" in data and data["content"]:
@@ -446,5 +452,6 @@ class TaiwanLotteryMaster:
         return results
 
     def run(self): pass
+
 
 
